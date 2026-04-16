@@ -5,6 +5,7 @@ targets:
   HeartBit:
     type: application
     platform: macOS
+    scheme: {}
     deploymentTarget: "14.0"
     sources:
       - Sources

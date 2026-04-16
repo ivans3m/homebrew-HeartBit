@@ -59,5 +59,10 @@ fastlane/test_output
 *.swp
 *.tmp
 
+# Cursor / tooling
+.cursor/
+.cursor/rules/
+build.sh
+
 # Local tooling archive
 xcodegen.zip
