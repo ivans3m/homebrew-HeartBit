@@ -58,3 +58,6 @@ fastlane/test_output
 *~
 *.swp
 *.tmp
+
+# Local tooling archive
+xcodegen.zip
