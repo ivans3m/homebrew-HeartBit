@@ -59,13 +59,11 @@ fastlane/test_output
 *.swp
 *.tmp
 
-# Cursor / tooling
-.cursor/
-.cursor/rules/
+# tooling
 build.sh
 
 # Local tooling archive
 xcodegen.zip
 
 # Release artifacts
-Release/HeartBit.app
+Release/

@@ -2,6 +2,9 @@
 
 HeartBit is a minimal, robust personal task runner for macOS that lives quietly in your menu bar. Built with native Swift and modern SwiftUI, it lets you schedule scripts, apps, and shell commands like `cron`, but with a native Mac interface.
 
+### What it does
+HeartBit runs your automation tasks on schedule in the background, with logging and safety controls designed for developer workflows. Typical use cases include recurring scripts, backups, local maintenance jobs, and app/command launch automation.
+
 ## Features
 - **Precise Scheduling**: Run tasks down to the minute, hour, day, week, or month, with calendar-aware scheduling and an integrated Apple Calendar-style start time picker.
 - **Sequential Pipeline**: Overlapping tasks queue safely in the background instead of competing for system resources. Watchdog timeouts automatically kill and report hanging scripts.
@@ -26,6 +29,21 @@ Because of that, HeartBit is distributed directly through GitHub as a standalone
 ```bash
 xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 ```
+
+6. After launch, look for the HeartBit icon in the **menu bar** (top-right). The app is menu-bar-first and may not show as a regular Dock app unless a settings window is open.
+
+### Quick Start
+1. Open HeartBit from the menu bar icon.
+2. Create your first task (script/app/command).
+3. Set its schedule and save.
+4. Verify execution in logs:
+   - In-app execution output
+   - `~/Library/Logs/HeartBit/HeartBit.log`
+
+### Troubleshooting
+- **“App is damaged” / blocked by Gatekeeper**: run the quarantine command above and reopen.
+- **No visible main window after launch**: check the macOS menu bar for the HeartBit icon.
+- **Task did not run**: confirm schedule, Mac sleep state, and check logs for stdout/stderr details.
 
 ### Build from Source
 1. Clone the repository.
