@@ -1,0 +1,25 @@
+name: HeartBit
+options:
+  bundleIdPrefix: com.s3m
+targets:
+  HeartBit:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Sources
+    info:
+      path: Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleIdentifier: "com.s3m.HeartBit"
+        CFBundleShortVersionString: "1.3.3"
+        CFBundleVersion: "6"
+    settings:
+      base:
+        PRODUCT_NAME: HeartBit
+        ENABLE_APP_SANDBOX: "NO"
+        CODE_SIGN_IDENTITY: "-"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DEAD_CODE_STRIPPING: "YES"
+        ENABLE_USER_SCRIPT_SANDBOXING: "YES"
