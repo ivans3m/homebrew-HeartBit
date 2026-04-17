@@ -256,7 +256,9 @@ class JobManager {
         
         await MainActor.run {
             jobs[idx].isRunning = true
-            jobs[idx].lastRunStatus = .running
+            if !isDryRun {
+                jobs[idx].lastRunStatus = .running
+            }
             jobs[idx].latestOutput = ""
         }
         

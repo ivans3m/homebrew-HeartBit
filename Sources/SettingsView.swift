@@ -121,7 +121,7 @@ struct AboutView: View {
                 .frame(width: 100, height: 100)
                 .cornerRadius(20)
             
-            Text("HeartBit v1.3.3")
+            Text("HeartBit v1.3.4")
                 .font(.largeTitle).bold()
             
             Text("HeartBit is a minimal, robust personal task runner for macOS that lives quietly in your menu bar. Built with native Swift and modern SwiftUI, it allows you to schedule scripts, apps, and shell commands just like cron, but with an elegant native Mac interface.")
@@ -415,6 +415,10 @@ struct JobDetailView: View {
                                 .toggleStyle(.switch)
                             Spacer()
                             
+                            Button("Run Job") { jobManager.enqueueJob(id: jobId, isDryRun: false) }
+                                .disabled(isRunning || jobManager.jobs[idx].command.isEmpty || jobManager.isExecutionPaused)
+                                .padding(.trailing)
+
                             Button("Dry-Run Now") { jobManager.enqueueJob(id: jobId, isDryRun: true) }
                                 .disabled(isRunning || jobManager.jobs[idx].command.isEmpty || jobManager.isExecutionPaused)
                                 .padding(.trailing)
