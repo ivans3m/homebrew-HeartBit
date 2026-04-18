@@ -1,0 +1,9 @@
+---
+description: Homebrew cask, project.yml versions, and release CI for HeartBit
+globs: Casks/**
+alwaysApply: false
+---
+
+# Cask, versions, CI
+
+Same conventions as [release-homebrew](release-homebrew.mdc): zip name `HeartBit-v<version>.zip`, [`Casks/heartbit.rb`](Casks/heartbit.rb) `version` + `sha256` match the GitHub release asset, tag `v<version>`. When bumping [`project.yml`](project.yml), keep `CFBundleShortVersionString` / `CFBundleVersion` in sync with the release. CI: [.github/workflows/heartbit-ci.yml](.github/workflows/heartbit-ci.yml).

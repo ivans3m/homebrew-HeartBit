@@ -128,6 +128,13 @@ Automated pipeline: bump version and build number in `project.yml`, build the zi
 
 See the [heartbit-release](.cursor/skills/heartbit-release/SKILL.md) Cursor skill for the full checklist.
 
+### Cursor (rules and AI context)
+- **Rules:** [`.cursor/rules/`](.cursor/rules/) — `heartbit-core` (always); `release-homebrew` / `homebrew-cask-and-ci` / `project-yml` when matching files are in scope (see [`.cursor/README.md`](.cursor/README.md)).
+- **Skills:** [`.cursor/skills/heartbit-release/`](.cursor/skills/heartbit-release/) — step-by-step release/publish workflow.
+- **Agents:** [AGENTS.md](AGENTS.md) — short pointer for AI tools; details live in the files above and [`.cursor/README.md`](.cursor/README.md).
+
+Task tracking uses **GitHub Issues** or **Cursor’s in-chat todos**; there is no required project-wide TODO file in git (see [`.cursor/README.md`](.cursor/README.md)).
+
 ## Support & License
 Designed for macOS 14.0+  
 (c) 2026, Ivan Diuldia  

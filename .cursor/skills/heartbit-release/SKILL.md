@@ -3,7 +3,7 @@ name: heartbit-release
 description: >-
   Prepare a HeartBit macOS release: version bump, Homebrew cask update, git tag,
   and GitHub release. Use when the user wants to publish, ship a version, cut a
-  release, or update the tap/cask.
+  release, or update the tap/cask. Complements .cursor/rules/release-homebrew.mdc.
 ---
 
 # HeartBit release and publish

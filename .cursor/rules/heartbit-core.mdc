@@ -1,0 +1,12 @@
+---
+description: HeartBit Swift app — scope, stack, and editing conventions
+alwaysApply: true
+---
+
+# HeartBit core
+
+- **Product:** Native macOS **menu bar** app (Swift / SwiftUI). Source: [`Sources/`](Sources/). Entry and lifecycle: app struct / scene in SwiftUI.
+- **Project shape:** [`project.yml`](project.yml) is the **XcodeGen** source of truth (version strings, bundle id `com.s3m.HeartBit`, `ENABLE_APP_SANDBOX: "NO"`). Do not hand-edit `*.xcodeproj` (generated; gitignored).
+- **Platform:** macOS **14+** (Sonoma). Prefer patterns that match existing files (naming, error handling, logging).
+- **Changes:** Keep edits **minimal and on-task**. Do not refactor unrelated code, add heavy dependencies, or new docs unless the user asked.
+- **Context:** User-facing install and maintainer workflows are in [README.md](README.md).

@@ -1,0 +1,10 @@
+---
+description: XcodeGen project.yml — HeartBit target versions and settings
+globs: project.yml
+alwaysApply: false
+---
+
+# project.yml
+
+- **Version:** `targets.HeartBit.info.properties.CFBundleShortVersionString` and `CFBundleVersion` must stay aligned with releases, [`Casks/heartbit.rb`](Casks/heartbit.rb), and GitHub tags `v*`.
+- **Generate:** Run XcodeGen after edits; do not commit hand-edited `.xcodeproj`.
