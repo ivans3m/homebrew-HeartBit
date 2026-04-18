@@ -8,7 +8,7 @@ cd "$ROOT"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build.sh <command>
+Usage: scripts/heartbit-build.sh <command>
 
   dev      Generate Xcode project, build Debug, open HeartBit.app for testing.
   release  Build Release, create Release/HeartBit-v<version>.zip, print SHA-256.

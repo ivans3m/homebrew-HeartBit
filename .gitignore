@@ -59,7 +59,7 @@ fastlane/test_output
 *.swp
 *.tmp
 
-# tooling (ignore only root scratch script; tracked scripts live under scripts/)
+# Optional personal script at repo root only (not tracked). Canonical build: scripts/heartbit-build.sh
 /build.sh
 
 # Local tooling archive

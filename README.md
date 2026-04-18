@@ -92,11 +92,11 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 3. Generate the Xcode project, open `HeartBit.xcodeproj`, then build and run on your Mac.
 
 ### Release build (maintainers)
-- **Test build (Debug, open app):** `./scripts/build.sh dev`
+- **Test build (Debug, open app):** `./scripts/heartbit-build.sh dev`
 - **Release zip for Homebrew** (`Release/HeartBit-v<version>.zip` + SHA-256 on stdout):
 
 ```bash
-./scripts/build.sh release
+./scripts/heartbit-build.sh release
 # or: ./scripts/build_release.sh
 ```
 

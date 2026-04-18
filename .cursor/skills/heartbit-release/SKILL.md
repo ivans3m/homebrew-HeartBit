@@ -34,7 +34,7 @@ Flags: `--no-push`, `--no-github`, `--skip-build` (expects zip already present),
 ## Before publishing
 
 1. **Merge or commit** all feature work; working tree should be clean (unless `--allow-dirty`).
-2. **Smoke test** the app: `./scripts/build.sh dev` (Debug build + opens `HeartBit.app`).
+2. **Smoke test** the app: `./scripts/heartbit-build.sh dev` (Debug build + opens `HeartBit.app`).
 3. **Auth:** `gh auth login` with permission to create releases on `ivans3m/homebrew-HeartBit`.
 4. **Optional:** `brew` in PATH so the script can `brew audit --cask heartbit` after tapping this repo.
 
@@ -42,13 +42,13 @@ Flags: `--no-push`, `--no-github`, `--skip-build` (expects zip already present),
 
 - **`brew audit`:** fix [Casks/heartbit.rb](Casks/heartbit.rb) or tap wiring; ensure `brew tap ivans3m/heartbit "$(pwd)"` works from the repo root.
 - **`gh release create`:** if push succeeded but GitHub failed, create the release manually and attach `Release/HeartBit-v<version>.zip`, using the same notes format as the script (Changes + Install + macOS 14+).
-- **Wrong version in YAML:** edit [project.yml](project.yml) carefully; re-run `scripts/build.sh release` and update the cask `version` / `sha256` to match the new zip.
+- **Wrong version in YAML:** edit [project.yml](project.yml) carefully; re-run `scripts/heartbit-build.sh release` and update the cask `version` / `sha256` to match the new zip.
 
 ## Related files
 
-- [scripts/build.sh](scripts/build.sh) — `dev` vs `release`
+- [scripts/heartbit-build.sh](scripts/heartbit-build.sh) — `dev` vs `release`
 - [scripts/publish_release.sh](scripts/publish_release.sh) — full publish pipeline
-- [scripts/build_release.sh](scripts/build_release.sh) — wrapper calling `build.sh release`
+- [scripts/build_release.sh](scripts/build_release.sh) — wrapper calling `heartbit-build.sh release`
 
 ## Out of scope here
 

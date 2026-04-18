@@ -39,7 +39,7 @@ Options:
   --dry-run       Show what would happen; do not modify files, git, or GitHub.
   --no-push       Commit and tag locally; do not push.
   --no-github     Push commits and tag; do not run gh release create.
-  --skip-build    Do not run scripts/build.sh release; use existing Release/HeartBit-v<version>.zip.
+  --skip-build    Do not run scripts/heartbit-build.sh release; use existing Release/HeartBit-v<version>.zip.
   --allow-dirty   Allow a dirty working tree before starting (default: require clean).
   -h, --help      Show this help.
 
@@ -140,7 +140,7 @@ fi
 
 if [[ ${DRY_RUN} -eq 1 ]]; then
   echo "[dry-run] would set CFBundleShortVersionString=${VERSION}, CFBundleVersion=${NEW_BUILD}"
-  echo "[dry-run] would run: scripts/build.sh release (unless --skip-build)"
+  echo "[dry-run] would run: scripts/heartbit-build.sh release (unless --skip-build)"
   echo "[dry-run] would update Casks/heartbit.rb version + sha256"
   echo "[dry-run] would: git commit, git tag v${VERSION}, git push, gh release create"
   rm -f "${NOTES_FILE}"
@@ -168,7 +168,7 @@ if [[ ${SKIP_BUILD} -eq 1 ]]; then
   fi
   echo "Using existing zip (--skip-build)."
 else
-  "${ROOT}/scripts/build.sh" release
+  "${ROOT}/scripts/heartbit-build.sh" release
 fi
 
 SHA256="$(shasum -a 256 "${ZIP_PATH}" | awk '{print $1}')"
