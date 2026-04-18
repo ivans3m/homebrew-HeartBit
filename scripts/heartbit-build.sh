@@ -30,9 +30,12 @@ find_xcodegen() {
 
 read_version() {
   local v
-  v="$(sed -n 's/^[[:space:]]*CFBundleShortVersionString: "\([^"]*\)".*/\1/p' project.yml | head -n1)"
+  v="$(ruby -ryaml -e '
+    h = YAML.load_file("project.yml")
+    print h.dig("targets", "HeartBit", "info", "properties", "CFBundleShortVersionString").to_s
+  ')"
   if [[ -z "${v}" ]]; then
-    echo "error: could not read CFBundleShortVersionString from project.yml" >&2
+    echo "error: could not read HeartBit CFBundleShortVersionString from project.yml" >&2
     exit 1
   fi
   echo "${v}"

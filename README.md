@@ -91,6 +91,19 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 2. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen) (for example `brew install xcodegen`), or use the vendored binary under `./xcodegen` if present.
 3. Generate the Xcode project, open `HeartBit.xcodeproj`, then build and run on your Mac.
 
+### For developers (build scripts)
+Canonical commands live under **`scripts/`**:
+
+| Command | Purpose |
+|--------|---------|
+| `./scripts/heartbit-build.sh dev` | XcodeGen + **Debug** build, opens `HeartBit.app` for local testing. |
+| `./scripts/heartbit-build.sh release` | XcodeGen + **Release** zip `Release/HeartBit-v<version>.zip` + prints SHA-256 (matches the Homebrew cask). |
+| `./build.sh` | Optional **wrapper** at the repo root — same as `scripts/heartbit-build.sh` (e.g. `./build.sh release`). |
+
+Do not use an old ad-hoc root script that calls `xcodebuild` on `HeartBit.xcodeproj` **without** running XcodeGen first, or that names zips `HeartBit-1.2.3.zip` (without the **`v`**): GitHub releases and [Casks/heartbit.rb](Casks/heartbit.rb) expect **`HeartBit-v<version>.zip`**.
+
+CI runs **`./scripts/heartbit-build.sh release`** on every push/PR to `main` (see [.github/workflows/heartbit-ci.yml](.github/workflows/heartbit-ci.yml)).
+
 ### Release build (maintainers)
 - **Test build (Debug, open app):** `./scripts/heartbit-build.sh dev`
 - **Release zip for Homebrew** (`Release/HeartBit-v<version>.zip` + SHA-256 on stdout):
@@ -110,6 +123,7 @@ Automated pipeline: bump version and build number in `project.yml`, build the zi
 ```bash
 ./scripts/publish_release.sh --dry-run 1.3.5   # preview release notes; no changes
 ./scripts/publish_release.sh 1.3.5             # optional second arg: CFBundleVersion integer
+./scripts/publish_release.sh --no-push --notes-out ./release-notes.md 1.3.5   # save notes if not using gh yet
 ```
 
 See the [heartbit-release](.cursor/skills/heartbit-release/SKILL.md) Cursor skill for the full checklist.

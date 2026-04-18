@@ -27,6 +27,7 @@ NO_PUSH=0
 NO_GITHUB=0
 SKIP_BUILD=0
 ALLOW_DIRTY=0
+NOTES_OUT=""
 
 usage() {
   cat <<'EOF'
@@ -41,11 +42,13 @@ Options:
   --no-github     Push commits and tag; do not run gh release create.
   --skip-build    Do not run scripts/heartbit-build.sh release; use existing Release/HeartBit-v<version>.zip.
   --allow-dirty   Allow a dirty working tree before starting (default: require clean).
+  --notes-out PATH  Write release notes preview to PATH (dry-run, or when push/gh skipped).
   -h, --help      Show this help.
 
 Examples:
   scripts/publish_release.sh 1.3.5
   scripts/publish_release.sh --dry-run 1.3.5
+  scripts/publish_release.sh --no-push --notes-out ./release-notes.md 1.3.5
 EOF
 }
 
@@ -56,6 +59,11 @@ while [[ $# -gt 0 ]]; do
     --no-github) NO_GITHUB=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --allow-dirty) ALLOW_DIRTY=1; shift ;;
+    --notes-out)
+      NOTES_OUT="${2:-}"
+      if [[ -z "${NOTES_OUT}" ]]; then echo "error: --notes-out requires a path" >&2; exit 1; fi
+      shift 2
+      ;;
     -h|--help) usage; exit 0 ;;
     --) shift; break ;;
     -*)
@@ -123,11 +131,20 @@ echo "---- Release notes preview ----"
 cat "${NOTES_FILE}"
 echo "-------------------------------"
 
-CURRENT_VER="$(sed -n 's/^[[:space:]]*CFBundleShortVersionString: "\([^"]*\)".*/\1/p' project.yml | head -n1)"
-CURRENT_BUILD="$(sed -n 's/^[[:space:]]*CFBundleVersion: "\([^"]*\)".*/\1/p' project.yml | head -n1)"
+# Read HeartBit-only keys (avoids picking up another target if project.yml grows).
+read_heartbit_versions() {
+  ruby -ryaml -e '
+    h = YAML.load_file("project.yml")
+    p = h.dig("targets", "HeartBit", "info", "properties")
+    abort "missing HeartBit version keys" unless p
+    print [p["CFBundleShortVersionString"], p["CFBundleVersion"]].join("\t")
+  '
+}
+
+IFS=$'\t' read -r CURRENT_VER CURRENT_BUILD < <(read_heartbit_versions) || true
 
 if [[ -z "${CURRENT_VER}" ]] || [[ -z "${CURRENT_BUILD}" ]]; then
-  echo "error: could not read version fields from project.yml" >&2
+  echo "error: could not read HeartBit version fields from project.yml" >&2
   rm -f "${NOTES_FILE}"
   exit 1
 fi
@@ -143,6 +160,10 @@ if [[ ${DRY_RUN} -eq 1 ]]; then
   echo "[dry-run] would run: scripts/heartbit-build.sh release (unless --skip-build)"
   echo "[dry-run] would update Casks/heartbit.rb version + sha256"
   echo "[dry-run] would: git commit, git tag v${VERSION}, git push, gh release create"
+  if [[ -n "${NOTES_OUT}" ]]; then
+    cp "${NOTES_FILE}" "${NOTES_OUT}"
+    echo "Wrote release notes preview to ${NOTES_OUT}"
+  fi
   rm -f "${NOTES_FILE}"
   exit 0
 fi
@@ -152,6 +173,15 @@ bump_project_yml() {
   sed -i '' "s/CFBundleVersion: \"${CURRENT_BUILD}\"/CFBundleVersion: \"${NEW_BUILD}\"/" project.yml
 }
 
+verify_project_yml_bump() {
+  local got_ver got_build
+  IFS=$'\t' read -r got_ver got_build < <(read_heartbit_versions) || true
+  if [[ "${got_ver}" != "${VERSION}" ]] || [[ "${got_build}" != "${NEW_BUILD}" ]]; then
+    echo "error: project.yml bump verification failed (expected ${VERSION} / ${NEW_BUILD}, got ${got_ver} / ${got_build})" >&2
+    exit 1
+  fi
+}
+
 update_cask() {
   local sha="$1"
   sed -i '' "s/^  version \".*\"/  version \"${VERSION}\"/" Casks/heartbit.rb
@@ -159,6 +189,7 @@ update_cask() {
 }
 
 bump_project_yml
+verify_project_yml_bump
 
 ZIP_PATH="${ROOT}/Release/HeartBit-v${VERSION}.zip"
 if [[ ${SKIP_BUILD} -eq 1 ]]; then
@@ -202,9 +233,13 @@ fi
 
 if [[ ${NO_GITHUB} -eq 1 ]] || [[ ${NO_PUSH} -eq 1 ]]; then
   echo "(skipped: gh release create)"
-  if [[ ${NO_GITHUB} -eq 0 ]] && [[ ${NO_PUSH} -eq 1 ]]; then
+  if [[ -n "${NOTES_OUT}" ]]; then
+    cp "${NOTES_FILE}" "${NOTES_OUT}"
+    echo "Wrote release notes to ${NOTES_OUT}"
+  elif [[ ${NO_GITHUB} -eq 0 ]] && [[ ${NO_PUSH} -eq 1 ]]; then
     echo "note: after pushing, run:" >&2
     echo "  gh release create ${TAG} ${ZIP_PATH} --title \"HeartBit v${VERSION}\" --notes-file <path-to-notes>" >&2
+    echo "tip: re-run with --notes-out PATH to save notes to a file" >&2
   fi
   rm -f "${NOTES_FILE}"
   exit 0

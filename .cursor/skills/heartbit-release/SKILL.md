@@ -46,9 +46,11 @@ Flags: `--no-push`, `--no-github`, `--skip-build` (expects zip already present),
 
 ## Related files
 
+- [build.sh](build.sh) (repo root) — optional thin wrapper; same as [scripts/heartbit-build.sh](scripts/heartbit-build.sh)
 - [scripts/heartbit-build.sh](scripts/heartbit-build.sh) — `dev` vs `release`
-- [scripts/publish_release.sh](scripts/publish_release.sh) — full publish pipeline
+- [scripts/publish_release.sh](scripts/publish_release.sh) — full publish pipeline (`--notes-out` saves release notes when using `--dry-run` or when push/`gh` is skipped)
 - [scripts/build_release.sh](scripts/build_release.sh) — wrapper calling `heartbit-build.sh release`
+- [.github/workflows/heartbit-ci.yml](.github/workflows/heartbit-ci.yml) — CI build of the release zip on `main`
 
 ## Out of scope here
 

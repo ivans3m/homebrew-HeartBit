@@ -59,9 +59,6 @@ fastlane/test_output
 *.swp
 *.tmp
 
-# Optional personal script at repo root only (not tracked). Canonical build: scripts/heartbit-build.sh
-/build.sh
-
 # Local tooling archive
 xcodegen.zip
 

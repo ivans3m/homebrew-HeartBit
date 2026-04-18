@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    name: Release zip (XcodeGen + xcodebuild)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build release artifact
+        run: ./scripts/heartbit-build.sh release
+
+      - name: Verify zip
+        run: |
+          ls -la Release/
+          shopt -s nullglob
+          zips=(Release/HeartBit-v*.zip)
+          if [[ ${#zips[@]} -ne 1 ]]; then
+            echo "error: expected exactly one HeartBit-v*.zip" >&2
+            exit 1
+          fi
