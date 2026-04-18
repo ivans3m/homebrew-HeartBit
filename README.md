@@ -92,13 +92,27 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 3. Generate the Xcode project, open `HeartBit.xcodeproj`, then build and run on your Mac.
 
 ### Release build (maintainers)
-To produce a distributable zip matching release naming (`Release/HeartBit-v<version>.zip`), run:
+- **Test build (Debug, open app):** `./scripts/build.sh dev`
+- **Release zip for Homebrew** (`Release/HeartBit-v<version>.zip` + SHA-256 on stdout):
 
 ```bash
-./scripts/build_release.sh
+./scripts/build.sh release
+# or: ./scripts/build_release.sh
 ```
 
-The script reads the version from `project.yml`, builds the Release configuration, and writes `HeartBit-v<version>.zip` under `Release/`. It prints a SHA-256 checksum for updating [Casks/heartbit.rb](Casks/heartbit.rb) when you publish a new GitHub release.
+Version comes from `CFBundleShortVersionString` in [project.yml](project.yml).
+
+### Publish a new version (maintainers)
+Automated pipeline: bump version and build number in `project.yml`, build the zip, update [Casks/heartbit.rb](Casks/heartbit.rb), commit, tag `v<version>`, push, and create a **GitHub release** with notes generated from `git log` since the last tag.
+
+**Requirements:** Xcode, XcodeGen, `gh` CLI (`gh auth login`), clean git status (unless `--allow-dirty`). Homebrew is optional but recommended for `brew audit --cask`.
+
+```bash
+./scripts/publish_release.sh --dry-run 1.3.5   # preview release notes; no changes
+./scripts/publish_release.sh 1.3.5             # optional second arg: CFBundleVersion integer
+```
+
+See the [heartbit-release](.cursor/skills/heartbit-release/SKILL.md) Cursor skill for the full checklist.
 
 ## Support & License
 Designed for macOS 14.0+  

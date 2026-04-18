@@ -59,8 +59,8 @@ fastlane/test_output
 *.swp
 *.tmp
 
-# tooling
-build.sh
+# tooling (ignore only root scratch script; tracked scripts live under scripts/)
+/build.sh
 
 # Local tooling archive
 xcodegen.zip
