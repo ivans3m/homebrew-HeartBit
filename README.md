@@ -19,8 +19,35 @@ Because of that, HeartBit is distributed directly through GitHub as a standalone
 
 ## Installation
 
-### Download and Run on macOS
-1. Go to the [GitHub Releases](https://github.com/ivans3m/HeartBit/releases) page and download the latest `HeartBit-<version>.zip`.
+### Homebrew (recommended)
+This repository is a [Homebrew tap](https://docs.brew.sh/Taps). Install HeartBit with:
+
+```bash
+brew tap ivans3m/heartbit
+brew install --cask heartbit
+```
+
+If the short tap name does not resolve (unusual), use the full git URL:
+
+```bash
+brew tap ivans3m/heartbit https://github.com/ivans3m/homebrew-HeartBit.git
+brew install --cask heartbit
+```
+
+**Uninstall**
+
+```bash
+brew uninstall --cask heartbit
+```
+
+To remove the tap as well (optional, only if you do not need updates from this tap):
+
+```bash
+brew untap ivans3m/heartbit
+```
+
+### Download and run on macOS
+1. Go to the [GitHub Releases](https://github.com/ivans3m/homebrew-HeartBit/releases) page and download the latest `HeartBit-v<version>.zip` (for example `HeartBit-v1.3.4.zip`).
 2. Open the archive and drag `HeartBit.app` into your `/Applications` folder.
 3. On first launch, macOS may warn that HeartBit is from an unidentified developer because it is distributed outside the App Store.
 4. To open it the first time, go to `/Applications`, right-click `HeartBit.app`, choose **Open**, and confirm.
@@ -45,10 +72,25 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 - **No visible main window after launch**: check the macOS menu bar for the HeartBit icon.
 - **Task did not run**: confirm schedule, Mac sleep state, and check logs for stdout/stderr details.
 
-### Build from Source
-1. Clone the repository.
-2. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+### Build from source
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/ivans3m/homebrew-HeartBit.git
+   cd homebrew-HeartBit
+   ```
+
+2. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen) (for example `brew install xcodegen`), or use the vendored binary under `./xcodegen` if present.
 3. Generate the Xcode project, open `HeartBit.xcodeproj`, then build and run on your Mac.
+
+### Release build (maintainers)
+To produce a distributable zip matching release naming (`Release/HeartBit-v<version>.zip`), run:
+
+```bash
+./scripts/build_release.sh
+```
+
+The script reads the version from `project.yml`, builds the Release configuration, and writes `HeartBit-v<version>.zip` under `Release/`. It prints a SHA-256 checksum for updating [Casks/heartbit.rb](Casks/heartbit.rb) when you publish a new GitHub release.
 
 ## Support & License
 Designed for macOS 14.0+  
