@@ -1,5 +1,7 @@
 # HeartBit
 
+*Minimal macOS menu bar task runner: schedule scripts and shell commands with cron-like control, catch-up policies, and local logging.*
+
 HeartBit is a minimal, robust personal task runner for macOS that lives quietly in your menu bar. Built with native Swift and modern SwiftUI, it lets you schedule scripts, apps, and shell commands like `cron`, but with a native Mac interface.
 
 ### What it does
@@ -44,6 +46,12 @@ To remove the tap as well (optional, only if you do not need updates from this t
 
 ```bash
 brew untap ivans3m/heartbit
+```
+
+To remove the app plus associated logs and preferences defined in the cask (optional):
+
+```bash
+brew uninstall --zap --cask heartbit
 ```
 
 ### Download and run on macOS
