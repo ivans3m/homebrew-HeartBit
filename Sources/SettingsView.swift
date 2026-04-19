@@ -239,9 +239,28 @@ struct CronJobsView: View {
     @Environment(JobManager.self) private var jobManager
     @Binding var selection: SettingsSelection?
     @State private var deletingJob: HeartBitJob?
+    @State private var pendingImportData: Data?
+    @State private var showImportChoice = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
 
     var body: some View {
         List {
+            Section {
+                HStack(spacing: 12) {
+                    Button {
+                        exportJobsToFile()
+                    } label: {
+                        Label("Export Jobs…", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        pickImportFile()
+                    } label: {
+                        Label("Import Jobs…", systemImage: "square.and.arrow.down")
+                    }
+                }
+            }
+
             let sortedJobs = jobManager.jobs.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             ForEach(sortedJobs) { job in
                 HStack(spacing: 12) {
@@ -297,6 +316,28 @@ struct CronJobsView: View {
         }
         .navigationTitle("Crono")
         .confirmationDialog(
+            "Import jobs",
+            isPresented: $showImportChoice,
+            titleVisibility: .visible
+        ) {
+            Button("Replace all jobs", role: .destructive) {
+                performImport(replacingExisting: true)
+            }
+            Button("Add imported jobs") {
+                performImport(replacingExisting: false)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingImportData = nil
+            }
+        } message: {
+            Text("Choose whether to replace your current job list or append imported jobs (new IDs are assigned when appending).")
+        }
+        .alert("HeartBit", isPresented: $showAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
+        .confirmationDialog(
             "Delete this job?",
             isPresented: Binding(
                 get: { deletingJob != nil },
@@ -317,6 +358,58 @@ struct CronJobsView: View {
             if let job = deletingJob {
                 Text("This will remove \"\(job.name)\".")
             }
+        }
+    }
+
+    private func exportJobsToFile() {
+        let data: Data
+        do {
+            data = try jobManager.exportJobsFileData()
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+            return
+        }
+        let savePanel = NSSavePanel()
+        savePanel.title = "Export HeartBit Jobs"
+        savePanel.nameFieldStringValue = "HeartBit-jobs.json"
+        savePanel.allowedContentTypes = [.json]
+        savePanel.canCreateDirectories = true
+        guard savePanel.runModal() == .OK, let url = savePanel.url else { return }
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+    }
+
+    private func pickImportFile() {
+        let openPanel = NSOpenPanel()
+        openPanel.title = "Import HeartBit Jobs"
+        openPanel.allowedContentTypes = [.json]
+        openPanel.allowsMultipleSelection = false
+        openPanel.canChooseDirectories = false
+        guard openPanel.runModal() == .OK, let url = openPanel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            _ = try JobManager.decodeJobsForImport(from: data)
+            pendingImportData = data
+            showImportChoice = true
+        } catch {
+            alertMessage = "Could not read or decode this file: \(error.localizedDescription)"
+            showAlert = true
+        }
+    }
+
+    private func performImport(replacingExisting: Bool) {
+        guard let data = pendingImportData else { return }
+        pendingImportData = nil
+        do {
+            try jobManager.importJobs(from: data, replacingExisting: replacingExisting)
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
         }
     }
 

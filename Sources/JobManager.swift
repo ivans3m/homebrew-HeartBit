@@ -114,6 +114,41 @@ class JobManager {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
     }
+
+    /// Pretty-printed JSON for saving to a file from the Crono export action.
+    func exportJobsFileData() throws -> Data {
+        let payload = HeartBitJobsExport(jobs: jobs)
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted]
+        return try enc.encode(payload)
+    }
+
+    /// Decodes jobs from export file data or a raw `[HeartBitJob]` JSON array (same shape as UserDefaults).
+    static func decodeJobsForImport(from data: Data) throws -> [HeartBitJob] {
+        let decoder = JSONDecoder()
+        if let wrapped = try? decoder.decode(HeartBitJobsExport.self, from: data) {
+            return wrapped.jobs
+        }
+        return try decoder.decode([HeartBitJob].self, from: data)
+    }
+
+    /// Imports jobs from exported JSON. `replacingExisting` replaces the in-memory list; otherwise jobs are appended with fresh UUIDs.
+    func importJobs(from data: Data, replacingExisting: Bool) throws {
+        var imported = try Self.decodeJobsForImport(from: data)
+        for i in imported.indices {
+            imported[i].isRunning = false
+        }
+        if replacingExisting {
+            jobs = imported
+        } else {
+            for var j in imported {
+                j.id = UUID()
+                jobs.append(j)
+            }
+        }
+        saveJobs()
+        syncCronJobsNow()
+    }
     
     func addJob(_ job: HeartBitJob) {
         var newJob = job

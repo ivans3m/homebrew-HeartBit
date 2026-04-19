@@ -204,6 +204,18 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     }
 }
 
+/// JSON file wrapper for File ▸ Export from the Crono tab (plain `[HeartBitJob]` is also accepted on import).
+struct HeartBitJobsExport: Codable {
+    static let currentFormatVersion = 1
+    var formatVersion: Int
+    var jobs: [HeartBitJob]
+
+    init(jobs: [HeartBitJob]) {
+        self.formatVersion = Self.currentFormatVersion
+        self.jobs = jobs
+    }
+}
+
 func isValidCronExpression(_ expression: String) -> Bool {
     (try? CronExpression(expression)) != nil
 }
