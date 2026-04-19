@@ -360,6 +360,13 @@ class JobManager {
         saveJobs()
         checkSchedules()
     }
+
+    /// When the user sets a clock time that falls on **today** but is not after the current moment (common with a time-only DatePicker that keeps today’s date), roll the calendar day forward by one so the anchor means the **next** occurrence—typically tomorrow at that time—instead of the past or “run immediately.”
+    static func rollStartDateForwardIfTodayAlreadyPassed(_ date: Date, now: Date = Date()) -> Date {
+        let cal = Calendar.current
+        guard cal.isDate(date, inSameDayAs: now), date <= now else { return date }
+        return cal.date(byAdding: .day, value: 1, to: date) ?? date
+    }
     
     // MARK: - Lifecycle
     

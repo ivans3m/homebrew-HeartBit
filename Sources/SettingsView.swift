@@ -469,19 +469,20 @@ struct JobDetailView: View {
                 let startDateBinding = Binding(
                     get: { jobManager.jobs[idx].startDate },
                     set: { newDate in
-                        jobManager.jobs[idx].startDate = newDate
+                        let adjusted = JobManager.rollStartDateForwardIfTodayAlreadyPassed(newDate)
+                        jobManager.jobs[idx].startDate = adjusted
                         let interval = jobManager.jobs[idx].scheduleInterval
                         let mode = jobManager.jobs[idx].executionMode
                         if mode == .heartbit && interval != .custom {
-                            jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: interval, startDate: newDate)
+                            jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: interval, startDate: adjusted)
                         } else if mode == .cron || interval == .custom {
                             let current = jobManager.jobs[idx].customCronExpression
                             let base = current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? JobManager.cronExpression(from: .hour, startDate: newDate)
+                                ? JobManager.cronExpression(from: .hour, startDate: adjusted)
                                 : current
                             jobManager.jobs[idx].customCronExpression = JobManager.mergeStartDateIntoCronExpression(
                                 base,
-                                startDate: newDate,
+                                startDate: adjusted,
                                 updateCalendarFields: interval == .once
                             )
                         }
