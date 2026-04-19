@@ -14,7 +14,12 @@ class JobManager {
         didSet { UserDefaults.standard.set(isExecutionPaused, forKey: "HB_IsExecutionPaused") }
     }
     var showInDock: Bool = false {
-        didSet { UserDefaults.standard.set(showInDock, forKey: "HB_ShowInDock") }
+        didSet {
+            UserDefaults.standard.set(showInDock, forKey: "HB_ShowInDock")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .heartbitRequestActivationPolicyUpdate, object: nil)
+            }
+        }
     }
     var logActivity: Bool = true {
         didSet { UserDefaults.standard.set(logActivity, forKey: "HB_LogActivity") }
@@ -546,4 +551,8 @@ class JobManager {
             return "* * * * *"
         }
     }
+}
+
+extension Notification.Name {
+    static let heartbitRequestActivationPolicyUpdate = Notification.Name("com.s3m.HeartBit.requestActivationPolicyUpdate")
 }

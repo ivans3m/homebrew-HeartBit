@@ -19,6 +19,7 @@ struct HeartBitApp: App {
     
     var body: some Scene {
         MenuBarExtra {
+            Group {
             if jobManager.isExecutionPaused {
                 Text("Execution is Paused")
                     .foregroundColor(.secondary)
@@ -93,6 +94,11 @@ struct HeartBitApp: App {
             }
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
+            }
+            }
+            .onAppear { updateActivationPolicy() }
+            .onReceive(NotificationCenter.default.publisher(for: .heartbitRequestActivationPolicyUpdate)) { _ in
+                updateActivationPolicy()
             }
         } label: {
             if jobManager.isExecutionPaused {
