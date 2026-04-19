@@ -10,3 +10,5 @@ alwaysApply: true
 - **Platform:** macOS **14+** (Sonoma). Prefer patterns that match existing files (naming, error handling, logging).
 - **Changes:** Keep edits **minimal and on-task**. Do not refactor unrelated code, add heavy dependencies, or new docs unless the user asked.
 - **Context:** User-facing install and maintainer workflows are in [README.md](README.md).
+- **Public Markdown (`README.md`, etc.):** Do not name proprietary IDE or AI-assistant products. Link repository paths (e.g. `.cursor/rules/`) neutrally when maintainers need them.
+- **Task tracking:** Prefer **GitHub Issues**; there is no required project-wide TODO file in git. Conventions for optional in-repo checklists and local tooling live in [`.cursor/README.md`](.cursor/README.md).

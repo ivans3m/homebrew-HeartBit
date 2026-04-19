@@ -32,6 +32,7 @@ class JobManager {
     // Custom Queue
     @ObservationIgnored private var executionQueue: [(UUID, Bool)] = []
     @ObservationIgnored private var isWorkingQueue: Bool = false
+    @ObservationIgnored private var scheduledCronSync: DispatchWorkItem?
     
     init() {
         let libraryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
@@ -45,6 +46,7 @@ class JobManager {
         self.logRetentionDays = UserDefaults.standard.object(forKey: "HB_LogRetentionDays") as? Int ?? 30
         
         loadJobs()
+        mergeWithCrontab()
         setupTimer()
         setupWakeListener()
         purgeOldLogs()
@@ -113,6 +115,7 @@ class JobManager {
         newJob.nextExpectedRunDate = job.startDate
         jobs.append(newJob)
         saveJobs()
+        syncCronJobsNow()
         appendLog("Added new job: \(newJob.name)")
     }
     
@@ -120,6 +123,7 @@ class JobManager {
         if let idx = jobs.firstIndex(where: { $0.id == job.id }) {
             jobs[idx] = job
             saveJobs()
+            syncCronJobsNow()
         }
     }
     
@@ -129,6 +133,7 @@ class JobManager {
         }
         jobs.removeAll { $0.id == id }
         saveJobs()
+        syncCronJobsImmediately()
     }
     
     // MARK: - Scheduling
@@ -137,7 +142,7 @@ class JobManager {
         let now = Date()
         for idx in jobs.indices {
             var job = jobs[idx]
-            guard job.isEnabled else { continue }
+            guard job.isEnabled, job.executionMode == .heartbit else { continue }
             
             if job.nextExpectedRunDate == nil {
                 if now < job.startDate {
@@ -145,7 +150,7 @@ class JobManager {
                 } else if job.scheduleInterval == .once {
                     job.nextExpectedRunDate = now
                 } else {
-                    job.nextExpectedRunDate = calculateNextRun(from: job.startDate, interval: job.scheduleInterval)
+                    job.nextExpectedRunDate = calculateNextRun(for: job, from: job.startDate)
                 }
                 jobs[idx] = job
             }
@@ -163,6 +168,7 @@ class JobManager {
     
     private func handleMissedAndRun(jobIndex: Int, now: Date) {
         let job = jobs[jobIndex]
+        guard job.executionMode == .heartbit else { return }
         guard let expected = job.nextExpectedRunDate else { return }
         
         if job.scheduleInterval == .once {
@@ -172,7 +178,7 @@ class JobManager {
             return
         }
         
-        guard let nextStep = calculateNextRun(from: expected, interval: job.scheduleInterval) else { return }
+        guard let nextStep = calculateNextRun(for: job, from: expected) else { return }
         let intervalSeconds = nextStep.timeIntervalSince(expected)
         let missedTime = now.timeIntervalSince(expected)
         
@@ -180,12 +186,12 @@ class JobManager {
             let missedCount = Int(missedTime / intervalSeconds)
             switch job.missedRunPolicy {
             case .skip:
-                jobs[jobIndex].nextExpectedRunDate = advanceRun(from: expected, interval: job.scheduleInterval, passing: now)
+                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
             case .runOnce:
-                jobs[jobIndex].nextExpectedRunDate = advanceRun(from: expected, interval: job.scheduleInterval, passing: now)
+                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
                 enqueueJob(id: job.id, isDryRun: false)
             case .catchUp:
-                jobs[jobIndex].nextExpectedRunDate = advanceRun(from: expected, interval: job.scheduleInterval, passing: now)
+                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
                 for _ in 0...missedCount { enqueueJob(id: job.id, isDryRun: false) }
             }
         } else {
@@ -195,6 +201,15 @@ class JobManager {
     }
     
     private func calculateNextRun(from base: Date, interval: ScheduleInterval) -> Date? {
+        calculateNextRun(for: nil, from: base, intervalOverride: interval)
+    }
+
+    private func calculateNextRun(for job: HeartBitJob, from base: Date) -> Date? {
+        calculateNextRun(for: job, from: base, intervalOverride: nil)
+    }
+
+    private func calculateNextRun(for job: HeartBitJob?, from base: Date, intervalOverride: ScheduleInterval?) -> Date? {
+        let interval = intervalOverride ?? job?.scheduleInterval ?? .once
         let cal = Calendar.current
         switch interval {
         case .once: return nil
@@ -204,13 +219,62 @@ class JobManager {
         case .day: return cal.date(byAdding: .day, value: 1, to: base)
         case .week: return cal.date(byAdding: .day, value: 7, to: base)
         case .month: return cal.date(byAdding: .month, value: 1, to: base)
+        case .custom:
+            return calculateNextRunFromCron(base: base, expression: job?.customCronExpression)
         }
+    }
+
+    private func calculateNextRunFromCron(base: Date, expression: String?) -> Date? {
+        guard let expression else { return nil }
+        guard let cron = try? CronExpression(expression) else { return nil }
+        var cursor = base.addingTimeInterval(60)
+        let cal = Calendar.current
+        let maxIterations = 366 * 24 * 60
+        for _ in 0..<maxIterations {
+            let comps = cal.dateComponents([.minute, .hour, .day, .month, .weekday], from: cursor)
+            guard let minute = comps.minute,
+                  let hour = comps.hour,
+                  let day = comps.day,
+                  let month = comps.month,
+                  let weekday = comps.weekday else {
+                cursor = cursor.addingTimeInterval(60)
+                continue
+            }
+            let cronWeekday = (weekday + 6) % 7
+            if cron.minutes.contains(minute) &&
+                cron.hours.contains(hour) &&
+                cron.months.contains(month) &&
+                cronDateMatch(day: day, cronWeekday: cronWeekday, cron: cron) {
+                return cursor
+            }
+            cursor = cursor.addingTimeInterval(60)
+        }
+        return nil
+    }
+
+    private func cronDateMatch(day: Int, cronWeekday: Int, cron: CronExpression) -> Bool {
+        let domMatch = cron.daysOfMonth.contains(day)
+        let dowMatch = cron.daysOfWeek.contains(cronWeekday)
+
+        if cron.isDayOfMonthWildcard && cron.isDayOfWeekWildcard { return true }
+        if cron.isDayOfMonthWildcard { return dowMatch }
+        if cron.isDayOfWeekWildcard { return domMatch }
+        return domMatch || dowMatch
     }
     
     private func advanceRun(from base: Date, interval: ScheduleInterval, passing target: Date) -> Date {
         var current = base
         while current <= target {
             if let next = calculateNextRun(from: current, interval: interval) { current = next }
+            else { break }
+        }
+        return current
+    }
+
+    private func advanceRun(for job: HeartBitJob, from base: Date, passing target: Date) -> Date {
+        var current = base
+        while current <= target {
+            if let next = calculateNextRun(for: job, from: current) { current = next }
             else { break }
         }
         return current
@@ -328,6 +392,84 @@ class JobManager {
                     self.appendLog("\(isDryRun ? "[DRY] " : "")ERROR - \(jobName): \(errStr)")
                 }
             }
+        }
+    }
+
+    /// Coalesces rapid edits into fewer `crontab` writes (reduces repeated macOS permission prompts).
+    func syncCronJobsNow() {
+        scheduledCronSync?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            CrontabManager.shared.syncCronJobs(self.jobs)
+        }
+        scheduledCronSync = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    func syncCronJobsImmediately() {
+        scheduledCronSync?.cancel()
+        CrontabManager.shared.syncCronJobs(jobs)
+    }
+
+    private func mergeWithCrontab() {
+        let cronJobs = CrontabManager.shared.loadCronJobs()
+        guard !cronJobs.isEmpty else { return }
+
+        for cronJob in cronJobs {
+            if let idx = jobs.firstIndex(where: { $0.id == cronJob.id }) {
+                jobs[idx].executionMode = .cron
+                jobs[idx].scheduleInterval = .custom
+                jobs[idx].customCronExpression = cronJob.customCronExpression
+                jobs[idx].isEnabled = cronJob.isEnabled
+                jobs[idx].isImportedFromExternalCron = cronJob.isImportedFromExternalCron
+                if jobs[idx].name.isEmpty || jobs[idx].name == "New Job" {
+                    jobs[idx].name = cronJob.name
+                }
+                jobs[idx].command = cronJob.command
+                continue
+            }
+
+            if let existingBySignature = jobs.firstIndex(where: {
+                $0.executionMode == .cron &&
+                $0.command == cronJob.command &&
+                $0.customCronExpression == cronJob.customCronExpression
+            }) {
+                jobs[existingBySignature].isEnabled = true
+                jobs[existingBySignature].isImportedFromExternalCron = cronJob.isImportedFromExternalCron
+                continue
+            }
+
+            jobs.append(cronJob)
+        }
+
+        saveJobs()
+        syncCronJobsImmediately()
+    }
+
+    static func cronExpression(from interval: ScheduleInterval, startDate: Date) -> String {
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.minute, .hour, .day, .weekday], from: startDate)
+        let minute = comps.minute ?? 0
+        let hour = comps.hour ?? 0
+        let day = comps.day ?? 1
+        let weekday = ((comps.weekday ?? 1) + 6) % 7
+        switch interval {
+        case .once:
+            return "\(minute) \(hour) \(day) * \(weekday)"
+        case .minute:
+            return "* * * * *"
+        case .fiveMinutes:
+            return "*/5 * * * *"
+        case .hour:
+            return "\(minute) * * * *"
+        case .day:
+            return "\(minute) \(hour) * * *"
+        case .week:
+            return "\(minute) \(hour) * * \(weekday)"
+        case .month:
+            return "\(minute) \(hour) \(day) * *"
+        case .custom:
+            return "* * * * *"
         }
     }
 }

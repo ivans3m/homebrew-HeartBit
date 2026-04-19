@@ -8,7 +8,10 @@ HeartBit is a minimal, robust personal task runner for macOS that lives quietly 
 HeartBit runs your automation tasks on schedule in the background, with logging and safety controls designed for developer workflows. Typical use cases include recurring scripts, backups, local maintenance jobs, and app/command launch automation.
 
 ## Features
-- **Precise Scheduling**: Run tasks down to the minute, hour, day, week, or month, with calendar-aware scheduling and an integrated Apple Calendar-style start time picker.
+- **Dual Engine Scheduling**: Run jobs in native HeartBit mode or Cron mode, with a per-job switch to choose the execution engine. In Cron mode, schedules are registered in your user `crontab`; missed-run catch-up applies only in HeartBit mode.
+- **Crono & Crontab**: The **Crono** screen (sidebar, terminal icon) lists all jobs with a heart icon for HeartBit-scheduled jobs and a dotted-circle icon for Cron-scheduled jobs. Tap a job name to open its settings. Use **Crontab** at the bottom of Crono to view raw `crontab -l` output (Crontab is not a separate sidebar item).
+- **Run Every (cron)**: Recurring schedules use a single **5-field cron** text field (`minute hour day month weekday`), plus an optional **Presets** menu for common intervals. One-off jobs use **Runs once** with a menu to switch to a recurring schedule when needed.
+- **Precise Scheduling**: Calendar-style start date and time, combined with cron-style recurrence for repeating jobs.
 - **Sequential Pipeline**: Overlapping tasks queue safely in the background instead of competing for system resources. Watchdog timeouts automatically kill and report hanging scripts.
 - **Missed Run Policies**: If your Mac is asleep during a scheduled run, HeartBit can catch up automatically or run once after wake.
 - **Dynamic Dock Icon**: The app stays out of the way until needed, then shows its Dock icon when you open settings for easier window management.
@@ -55,7 +58,7 @@ brew uninstall --zap --cask heartbit
 ```
 
 ### Download and run on macOS
-1. Go to the [GitHub Releases](https://github.com/ivans3m/homebrew-HeartBit/releases) page and download the latest `HeartBit-v<version>.zip` (for example `HeartBit-v1.3.4.zip`).
+1. Go to the [GitHub Releases](https://github.com/ivans3m/homebrew-HeartBit/releases) page and download the latest `HeartBit-v<version>.zip` (for example `HeartBit-v1.4.0.zip`).
 2. Open the archive and drag `HeartBit.app` into your `/Applications` folder.
 3. On first launch, macOS may warn that HeartBit is from an unidentified developer because it is distributed outside the App Store.
 4. To open it the first time, go to `/Applications`, right-click `HeartBit.app`, choose **Open**, and confirm.
@@ -69,10 +72,11 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 
 ### Quick Start
 1. Open HeartBit from the menu bar icon.
-2. Create your first task (script/app/command).
-3. Set its schedule and save.
-4. Security note: task commands run with your current macOS user permissions.
-5. Verify execution in logs:
+2. Choose **Settings** to open the settings window (menu-bar-first apps may only show a Dock icon while Settings is open).
+3. Under **Jobs**, create a task (script/app/command). Under **Crono**, see every job in one list; use **Crontab** there to inspect live `crontab -l` text.
+4. Set engine (HeartBit or Cron), command, and schedule (5-field cron for recurring jobs).
+5. Security note: task commands run with your current macOS user permissions.
+6. Verify execution in logs:
    - In-app execution output
    - `~/Library/Logs/HeartBit/HeartBit.log`
 
@@ -80,6 +84,7 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 - **“App is damaged” / blocked by Gatekeeper**: run the quarantine command above and reopen.
 - **No visible main window after launch**: check the macOS menu bar for the HeartBit icon.
 - **Task did not run**: confirm schedule, Mac sleep state, and check logs for stdout/stderr details.
+- **“HeartBit wants to administer your computer” (or similar) when saving Cron jobs**: macOS shows this when the app updates your user `crontab`. The system decides whether to prompt; HeartBit cannot store an “always allow” answer inside the app. After you approve once, you should see fewer prompts; HeartBit also avoids rewriting `crontab` when nothing changed and batches rapid edits. If prompts persist, check **System Settings → Privacy & Security** for anything still pending for HeartBit, and ensure you are not running multiple copies of the app.
 
 ### Build from source
 1. Clone the repository:
@@ -122,19 +127,12 @@ Automated pipeline: bump version and build number in `project.yml`, build the zi
 **Requirements:** Xcode, XcodeGen, `gh` CLI (`gh auth login`), clean git status (unless `--allow-dirty`). Homebrew is optional but recommended for `brew audit --cask`.
 
 ```bash
-./scripts/publish_release.sh --dry-run 1.3.5   # preview release notes; no changes
-./scripts/publish_release.sh 1.3.5             # optional second arg: CFBundleVersion integer
-./scripts/publish_release.sh --no-push --notes-out ./release-notes.md 1.3.5   # save notes if not using gh yet
+./scripts/publish_release.sh --dry-run 1.4.0   # preview release notes; no changes
+./scripts/publish_release.sh 1.4.0             # optional second arg: CFBundleVersion integer
+./scripts/publish_release.sh --no-push --notes-out ./release-notes.md 1.4.0   # save notes if not using gh yet
 ```
 
-See the [heartbit-release](.cursor/skills/heartbit-release/SKILL.md) Cursor skill for the full checklist.
-
-### Cursor (rules and AI context)
-- **Rules:** [`.cursor/rules/`](.cursor/rules/) — `heartbit-core` (always); `release-homebrew` / `homebrew-cask-and-ci` / `project-yml` when matching files are in scope (see [`.cursor/README.md`](.cursor/README.md)).
-- **Skills:** [`.cursor/skills/heartbit-release/`](.cursor/skills/heartbit-release/) — step-by-step release/publish workflow.
-- **Agents:** [AGENTS.md](AGENTS.md) — short pointer for AI tools; details live in the files above and [`.cursor/README.md`](.cursor/README.md).
-
-Task tracking uses **GitHub Issues** or **Cursor’s in-chat todos**; there is no required project-wide TODO file in git (see [`.cursor/README.md`](.cursor/README.md)).
+For a detailed release checklist, see [.cursor/skills/heartbit-release/SKILL.md](.cursor/skills/heartbit-release/SKILL.md).
 
 ## Support & License
 Designed for macOS 14.0+  

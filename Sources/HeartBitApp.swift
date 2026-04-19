@@ -1,6 +1,17 @@
 import SwiftUI
 import AppKit
 
+private enum ActivationPolicyDebouncer {
+    private static var pending: DispatchWorkItem?
+
+    static func schedule(delay: TimeInterval = 0.22, _ body: @escaping () -> Void) {
+        pending?.cancel()
+        let item = DispatchWorkItem { body() }
+        pending = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+}
+
 @main
 struct HeartBitApp: App {
     @Environment(\.openWindow) private var openWindow
@@ -123,12 +134,25 @@ struct HeartBitApp: App {
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
             return
         }
-        let visibleWindows = NSApp.windows.filter { $0.isVisible && $0.className != "NSStatusBarWindow" }
-        if visibleWindows.isEmpty {
-            NSApp.setActivationPolicy(.accessory)
-        } else {
+        let hasCandidateWindow = NSApp.windows.contains { window in
+            guard window.className != "NSStatusBarWindow" else { return false }
+            if window.isVisible { return true }
+            if window.title == "Settings" { return true }
+            return false
+        }
+        if hasCandidateWindow {
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+        }
+        ActivationPolicyDebouncer.schedule {
+            guard !self.jobManager.showInDock else { return }
+            let stillHasWindow = NSApp.windows.contains { window in
+                guard window.className != "NSStatusBarWindow" else { return false }
+                return window.isVisible || window.title == "Settings"
+            }
+            if !stillHasWindow {
+                NSApp.setActivationPolicy(.accessory)
+            }
         }
     }
     
@@ -211,6 +235,9 @@ func styling(for job: HeartBitJob, bucket: JobBucket) -> MenuJobStyle {
 
     if !job.isEnabled {
         icon = "pause.circle"
+    } else if job.executionMode == .cron {
+        icon = "circle.dotted"
+        iconCol = grey
     } else if job.isRunning {
         icon = "arrow.triangle.2.circlepath"
         iconCol = .yellow
