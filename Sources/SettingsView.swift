@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 enum SettingsSelection: Hashable {
     case about
     case globalSettings
-    case timetable
     case job(UUID)
 }
 
@@ -24,9 +23,6 @@ struct SettingsView: View {
                     }
                     NavigationLink(value: SettingsSelection.globalSettings) {
                         Label("Global Settings", systemImage: "gear")
-                    }
-                    NavigationLink(value: SettingsSelection.timetable) {
-                        Label("Timetable", systemImage: "calendar")
                     }
                 }
                 
@@ -71,8 +67,6 @@ struct SettingsView: View {
                 AboutView()
             case .globalSettings:
                 GlobalSettingsView()
-            case .timetable:
-                TimetableView { date in addNewJob(at: date) }
             case .job(let id):
                 JobDetailView(jobId: id, selection: $selection)
             case .none:
@@ -212,107 +206,6 @@ struct GlobalSettingsView: View {
     }
 }
 
-struct TimetableView: View {
-    @Environment(JobManager.self) private var jobManager
-    let onAddTime: (Date) -> Void
-    
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Today's Agenda")
-                    .font(.title2).bold()
-                    .padding()
-                
-                let cal = Calendar.current
-                let startOfDay = cal.startOfDay(for: Date())
-                
-                let todayJobs = jobManager.jobs.filter { job in
-                    if let nex = job.nextExpectedRunDate, cal.isDateInToday(nex) { return true }
-                    if let last = job.lastRunDate, cal.isDateInToday(last) { return true }
-                    return false
-                }
-                
-                ForEach(0..<24) { hour in
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(alignment: .top) {
-                            Text("\(hour):00")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .frame(width: 45, alignment: .trailing)
-                            
-                            VStack(alignment: .leading, spacing: 5) {
-                                Divider()
-                                
-                                let slotStart = cal.date(byAdding: .hour, value: hour, to: startOfDay)!
-                                let slotEnd = cal.date(byAdding: .hour, value: 1, to: slotStart)!
-                                
-                                let jobsInSlot = todayJobs.filter { job in
-                                    let activeDate = job.nextExpectedRunDate ?? (job.lastRunDate ?? slotStart)
-                                    return activeDate >= slotStart && activeDate < slotEnd 
-                                }
-                                
-                                if !jobsInSlot.isEmpty {
-                                    ForEach(jobsInSlot) { job in
-                                        HStack {
-                                            let hasNext = job.nextExpectedRunDate != nil && job.isEnabled
-                                            Circle()
-                                                .fill(statusColor(status: job.lastRunStatus, hasNext: hasNext))
-                                                .frame(width: 8, height: 8)
-                                            
-                                            let timeDisplay = (job.nextExpectedRunDate ?? job.lastRunDate)?.formatted(date: .omitted, time: .shortened) ?? ""
-                                            Text(timeDisplay).font(.caption).bold()
-                                            Text(job.name).font(.subheadline)
-                                            Spacer()
-                                            
-                                            if job.scheduleInterval != .once {
-                                                Image(systemName: "arrow.rectanglepath").font(.caption2).foregroundColor(.secondary)
-                                            }
-                                            Text(statusText(job: job)).font(.caption2).foregroundColor(.secondary)
-                                        }
-                                        .padding(6)
-                                        .background(statusColor(status: job.lastRunStatus, hasNext: job.nextExpectedRunDate != nil && job.isEnabled).opacity(0.1))
-                                        .cornerRadius(6)
-                                    }
-                                } else {
-                                    Color.clear
-                                        .frame(height: 25)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture { onAddTime(slotStart) }
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .padding(.horizontal)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Timetable")
-    }
-    
-    private func statusColor(status: JobStatus, hasNext: Bool) -> Color {
-        if hasNext && status == .idle { return .blue }
-        switch status {
-        case .idle: return .gray
-        case .running: return .yellow
-        case .success: return .green
-        case .failed: return .red
-        }
-    }
-    
-    private func statusText(job: HeartBitJob) -> String {
-        if !job.isEnabled { return "Disabled" }
-        if job.isRunning { return "Running" }
-        if job.nextExpectedRunDate != nil && job.lastRunStatus == .idle { return "Pending" }
-        switch job.lastRunStatus {
-        case .idle: return "Pending"
-        case .running: return "Running"
-        case .success: return "Done"
-        case .failed: return "Error"
-        }
-    }
-}
-
 struct JobDetailView: View {
     @Environment(JobManager.self) private var jobManager
     let jobId: UUID
@@ -350,6 +243,9 @@ struct JobDetailView: View {
                                 TextField("Command / Path", text: Bindable(jobManager).jobs[idx].command)
                                 Button("Choose App...") { selectApp(idx: idx) }
                             }
+                            Text("Security: this command runs through /bin/zsh with your macOS user permissions.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         .padding(.bottom, 16)
                         
@@ -462,8 +358,7 @@ struct JobDetailView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = [.application] 
-        panel.allowedFileTypes = ["app"]
+        panel.allowedContentTypes = [.application]
         
         if panel.runModal() == .OK, let url = panel.url {
             let executablePath = url.path

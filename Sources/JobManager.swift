@@ -272,8 +272,13 @@ class JobManager {
         process.standardOutput = pipe
         process.standardError = pipe
         
+        actor TimeoutState {
+            private var timedOut = false
+            func markTimedOut() { timedOut = true }
+            func value() -> Bool { timedOut }
+        }
+        let timeoutState = TimeoutState()
         var outputStr = ""
-        var isTimeout = false
         
         do {
             try process.run()
@@ -283,7 +288,7 @@ class JobManager {
                 try await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000) // 10 minutes
                 if process.isRunning {
                     process.terminate()
-                    isTimeout = true
+                    await timeoutState.markTimedOut()
                 }
             }
             
@@ -293,7 +298,9 @@ class JobManager {
             process.waitUntilExit()
             watchDogTask.cancel() // Job completed
             
-            let success = process.terminationStatus == 0 && !isTimeout
+            let isTimedOut = await timeoutState.value()
+            let success = process.terminationStatus == 0 && !isTimedOut
+            let finalOutput = outputStr
             
             await MainActor.run {
                 if let updatedIdx = self.jobs.firstIndex(where: { $0.id == id }) {
@@ -301,10 +308,10 @@ class JobManager {
                         self.jobs[updatedIdx].lastRunDate = Date()
                         self.jobs[updatedIdx].lastRunStatus = success ? .success : .failed
                     }
-                    self.jobs[updatedIdx].latestOutput = isTimeout ? "TIMED OUT AFTER 10 MINUTES. ABORTED." : outputStr
+                    self.jobs[updatedIdx].latestOutput = isTimedOut ? "TIMED OUT AFTER 10 MINUTES. ABORTED." : finalOutput
                     self.jobs[updatedIdx].isRunning = false
                     self.saveJobs()
-                    self.appendLog("\(isDryRun ? "[DRY] " : "")\(success ? "SUCCESS" : "FAILED") - \(jobName)\(isTimeout ? " (TIMEOUT)" : "")")
+                    self.appendLog("\(isDryRun ? "[DRY] " : "")\(success ? "SUCCESS" : "FAILED") - \(jobName)\(isTimedOut ? " (TIMEOUT)" : "")")
                 }
             }
         } catch {

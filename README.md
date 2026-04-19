@@ -71,7 +71,8 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 1. Open HeartBit from the menu bar icon.
 2. Create your first task (script/app/command).
 3. Set its schedule and save.
-4. Verify execution in logs:
+4. Security note: task commands run with your current macOS user permissions.
+5. Verify execution in logs:
    - In-app execution output
    - `~/Library/Logs/HeartBit/HeartBit.log`
 
