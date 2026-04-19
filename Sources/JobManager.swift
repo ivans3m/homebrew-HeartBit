@@ -11,7 +11,12 @@ class JobManager {
     
     // Global Settings
     var isExecutionPaused: Bool = false {
-        didSet { UserDefaults.standard.set(isExecutionPaused, forKey: "HB_IsExecutionPaused") }
+        didSet {
+            UserDefaults.standard.set(isExecutionPaused, forKey: "HB_IsExecutionPaused")
+            DispatchQueue.main.async { [weak self] in
+                self?.checkSchedules()
+            }
+        }
     }
     var showInDock: Bool = false {
         didSet {
@@ -196,8 +201,15 @@ class JobManager {
             }
             
             if let expected = job.nextExpectedRunDate, now >= expected {
-                // Globally paused: do not enqueue; leave nextExpectedRunDate unchanged until unpaused.
-                guard !isExecutionPaused else { continue }
+                if isExecutionPaused {
+                    // Do not enqueue or apply missed-run / catch-up while paused. For recurring jobs,
+                    // advance nextExpectedRunDate as if misses were skipped so resuming does not burst catch-up.
+                    if job.scheduleInterval != .once {
+                        job.nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
+                        jobs[idx] = job
+                    }
+                    continue
+                }
                 handleMissedAndRun(jobIndex: idx, now: now)
             }
         }
