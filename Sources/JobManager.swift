@@ -209,12 +209,15 @@ class JobManager {
     private func handleMissedAndRun(jobIndex: Int, now: Date) {
         let job = jobs[jobIndex]
         guard job.executionMode == .heartbit else { return }
+        guard job.isEnabled else { return }
+        guard !isExecutionPaused else { return }
         guard let expected = job.nextExpectedRunDate else { return }
         
         if job.scheduleInterval == .once {
+            let id = job.id
+            enqueueJob(id: id, isDryRun: false, fromScheduler: true)
             jobs[jobIndex].isEnabled = false
             jobs[jobIndex].nextExpectedRunDate = nil
-            enqueueJob(id: job.id, isDryRun: false) // enqueue instead of execute direct
             return
         }
         
@@ -229,14 +232,14 @@ class JobManager {
                 jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
             case .runOnce:
                 jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
-                enqueueJob(id: job.id, isDryRun: false)
+                enqueueJob(id: job.id, isDryRun: false, fromScheduler: true)
             case .catchUp:
                 jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
-                for _ in 0...missedCount { enqueueJob(id: job.id, isDryRun: false) }
+                for _ in 0...missedCount { enqueueJob(id: job.id, isDryRun: false, fromScheduler: true) }
             }
         } else {
             jobs[jobIndex].nextExpectedRunDate = nextStep
-            enqueueJob(id: job.id, isDryRun: false)
+            enqueueJob(id: job.id, isDryRun: false, fromScheduler: true)
         }
     }
     
@@ -375,7 +378,13 @@ class JobManager {
     
     // MARK: - Execution Engine (Pipeline)
     
-    func enqueueJob(id: UUID, isDryRun: Bool = false) {
+    /// - Parameter fromScheduler: When `true`, the run comes from HeartBit scheduling; skipped if the job is disabled or execution is globally paused. Manual "Run" / dry-run from the UI passes `false`.
+    func enqueueJob(id: UUID, isDryRun: Bool = false, fromScheduler: Bool = false) {
+        if fromScheduler {
+            guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
+            guard jobs[idx].isEnabled else { return }
+            guard !isExecutionPaused else { return }
+        }
         if isDryRun { appendLog("Triggered Manual Dry-Run ID: \(id)") }
         executionQueue.append((id, isDryRun))
         processNextInQueue()
