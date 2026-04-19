@@ -375,15 +375,31 @@ struct JobDetailView: View {
             if let idx = jobIndex {
                 let startDateBinding = Binding(
                     get: { jobManager.jobs[idx].startDate },
-                    set: { 
-                        jobManager.jobs[idx].startDate = $0
-                        jobManager.jobs[idx].nextExpectedRunDate = $0
-                        if jobManager.jobs[idx].scheduleInterval != .custom {
-                            jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: jobManager.jobs[idx].scheduleInterval, startDate: $0)
+                    set: { newDate in
+                        jobManager.jobs[idx].startDate = newDate
+                        let interval = jobManager.jobs[idx].scheduleInterval
+                        let mode = jobManager.jobs[idx].executionMode
+                        if mode == .heartbit && interval != .custom {
+                            jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: interval, startDate: newDate)
+                        } else if mode == .cron || interval == .custom {
+                            let current = jobManager.jobs[idx].customCronExpression
+                            let base = current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? JobManager.cronExpression(from: .hour, startDate: newDate)
+                                : current
+                            jobManager.jobs[idx].customCronExpression = JobManager.mergeStartDateIntoCronExpression(
+                                base,
+                                startDate: newDate,
+                                updateCalendarFields: interval == .once
+                            )
                         }
                         jobManager.saveJobs()
+                        jobManager.rescheduleHeartBitJob(at: idx)
                         jobManager.syncCronJobsNow()
                     }
+                )
+                let scheduleIntervalBinding = Binding(
+                    get: { jobManager.jobs[idx].scheduleInterval },
+                    set: { applySchedulePreset(idx: idx, interval: $0) }
                 )
                 
                 let modeBinding = Binding(
@@ -410,8 +426,8 @@ struct JobDetailView: View {
                     set: {
                         jobManager.jobs[idx].customCronExpression = $0
                         jobManager.jobs[idx].scheduleInterval = .custom
-                        jobManager.jobs[idx].nextExpectedRunDate = nil
                         jobManager.saveJobs()
+                        jobManager.rescheduleHeartBitJob(at: idx)
                         DispatchQueue.main.async {
                             jobManager.syncCronJobsNow()
                         }
@@ -441,31 +457,43 @@ struct JobDetailView: View {
                             .pickerStyle(.segmented)
                             .disabled(jobManager.jobs[idx].scheduleInterval == .once)
 
-                            VStack(alignment: .leading) {
-                                HStack {
-                                    DatePicker("Start Date", selection: startDateBinding, displayedComponents: [.date])
-                                        .datePickerStyle(.graphical)
-                                        .frame(maxWidth: 300)
-                                    
-                                    DatePicker("Time", selection: startDateBinding, displayedComponents: [.hourAndMinute])
-                                        .datePickerStyle(.compact)
-                                        .labelsHidden()
-                                        .padding(.leading)
+                            if jobManager.jobs[idx].scheduleInterval == .once {
+                                VStack(alignment: .leading) {
+                                    HStack {
+                                        DatePicker("Start:", selection: startDateBinding, displayedComponents: [.date])
+                                            .datePickerStyle(.graphical)
+                                            .frame(maxWidth: 300)
+                                        
+                                        DatePicker("Time", selection: startDateBinding, displayedComponents: [.hourAndMinute])
+                                            .datePickerStyle(.compact)
+                                            .labelsHidden()
+                                            .padding(.leading)
+                                    }
                                 }
+                            } else {
+                                DatePicker("Time (anchor)", selection: startDateBinding, displayedComponents: [.hourAndMinute])
+                                    .datePickerStyle(.compact)
                             }
                             
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(alignment: .center, spacing: 8) {
-                                    Text(jobManager.jobs[idx].executionMode == .cron ? "Run every (cron):" : "Run every:")
-                                        .fixedSize()
-                                    Menu("Presets") {
-                                        ForEach(presetIntervalsForJob(jobManager.jobs[idx])) { interval in
-                                            Button(interval.rawValue) {
-                                                applySchedulePreset(idx: idx, interval: interval)
+                                    if jobManager.jobs[idx].executionMode == .heartbit {
+                                        Picker("Run every:", selection: scheduleIntervalBinding) {
+                                            ForEach(ScheduleInterval.allCases) { interval in
+                                                Text(interval.rawValue).tag(interval)
                                             }
                                         }
-                                    }
-                                    if jobManager.jobs[idx].scheduleInterval != .once {
+                                        .frame(maxWidth: 280, alignment: .leading)
+                                        if jobManager.jobs[idx].scheduleInterval == .custom {
+                                            TextField("", text: cronExpressionBinding)
+                                                .font(.system(.body, design: .monospaced))
+                                                .textFieldStyle(.roundedBorder)
+                                                .frame(width: 220, alignment: .leading)
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                    } else {
+                                        Text("Run every (cron):")
+                                            .fixedSize()
                                         TextField("", text: cronExpressionBinding)
                                             .font(.system(.body, design: .monospaced))
                                             .textFieldStyle(.roundedBorder)
@@ -478,13 +506,6 @@ struct JobDetailView: View {
                                     Text("Runs once, then stops.")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                }
-                                if jobManager.jobs[idx].scheduleInterval != .once,
-                                   !cronExpressionBinding.wrappedValue.isEmpty,
-                                   !isValidCronExpression(cronExpressionBinding.wrappedValue) {
-                                    Text("Cron format must be 5 fields: min hour day month weekday")
-                                        .font(.caption)
-                                        .foregroundStyle(.red)
                                 }
                             }
                             if jobManager.jobs[idx].executionMode == .heartbit {
@@ -596,26 +617,19 @@ struct JobDetailView: View {
         }
     }
     
-    private func presetIntervalsForJob(_ job: HeartBitJob) -> [ScheduleInterval] {
-        if job.executionMode == .cron {
-            return ScheduleInterval.allCases.filter { $0 != .custom && $0 != .once }
-        }
-        return ScheduleInterval.allCases.filter { $0 != .custom }
-    }
-
     private func applySchedulePreset(idx: Int, interval: ScheduleInterval) {
         if interval == .once {
             jobManager.jobs[idx].scheduleInterval = .once
             jobManager.jobs[idx].customCronExpression = ""
-            let now = Date()
-            let start = jobManager.jobs[idx].startDate
-            jobManager.jobs[idx].nextExpectedRunDate = now < start ? start : now
         } else {
             jobManager.jobs[idx].scheduleInterval = interval
-            jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: interval, startDate: jobManager.jobs[idx].startDate)
-            jobManager.jobs[idx].nextExpectedRunDate = nil
+            if interval != .custom {
+                jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: interval, startDate: jobManager.jobs[idx].startDate)
+            } else if jobManager.jobs[idx].customCronExpression.isEmpty {
+                jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: .hour, startDate: jobManager.jobs[idx].startDate)
+            }
         }
-        jobManager.saveJobs()
+        jobManager.rescheduleHeartBitJob(at: idx)
         DispatchQueue.main.async {
             jobManager.syncCronJobsNow()
         }

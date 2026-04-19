@@ -10,8 +10,9 @@ HeartBit runs your automation tasks on schedule in the background, with logging 
 ## Features
 - **Dual Engine Scheduling**: Run jobs in native HeartBit mode or Cron mode, with a per-job switch to choose the execution engine. In Cron mode, schedules are registered in your user `crontab`; missed-run catch-up applies only in HeartBit mode.
 - **Crono & Crontab**: The **Crono** screen (sidebar, terminal icon) lists all jobs with a heart icon for HeartBit-scheduled jobs and a dotted-circle icon for Cron-scheduled jobs. Tap a job name to open its settings. Use **Crontab** at the bottom of Crono to view raw `crontab -l` output (Crontab is not a separate sidebar item).
-- **Run Every (cron)**: Recurring schedules use a single **5-field cron** text field (`minute hour day month weekday`), plus an optional **Presets** menu for common intervals. One-off jobs use **Runs once** with a menu to switch to a recurring schedule when needed.
-- **Precise Scheduling**: Calendar-style start date and time, combined with cron-style recurrence for repeating jobs.
+- **Run every**: In **HeartBit** mode, choose **Run every:** from a picker (**Once**, common intervals, or **Custom**). The **5-field cron** field (`minute hour day month weekday`) appears only for **Custom**; preset intervals stay in the picker without exposing raw cron unless you need it. In **Cron** mode, you edit the cron line directly (what gets written to your user `crontab`).
+- **Start & anchor time**: For **Once**, use **Start:** (calendar) and **Time** for the single run. For recurring schedules, only **Time (anchor)** is shown; it sets the clock anchor presets use (for example “every day at 09:30”). Changing **Start** or time updates the stored cron for **Cron** jobs and for **HeartBit + Custom** (simple fields are updated; steps like `*/5` and lists/ranges are left as-is).
+- **Precise Scheduling**: One-off runs use calendar + time; repeating jobs combine the time anchor with the chosen interval or custom cron.
 - **Sequential Pipeline**: Overlapping tasks queue safely in the background instead of competing for system resources. Watchdog timeouts automatically kill and report hanging scripts.
 - **Missed Run Policies**: If your Mac is asleep during a scheduled run, HeartBit can catch up automatically or run once after wake.
 - **Dynamic Dock Icon**: The app stays out of the way until needed, then shows its Dock icon when you open settings for easier window management.
@@ -74,7 +75,7 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 1. Open HeartBit from the menu bar icon.
 2. Choose **Settings** to open the settings window (menu-bar-first apps may only show a Dock icon while Settings is open).
 3. Under **Jobs**, create a task (script/app/command). Under **Crono**, see every job in one list; use **Crontab** there to inspect live `crontab -l` text.
-4. Set engine (HeartBit or Cron), command, and schedule (5-field cron for recurring jobs).
+4. Set engine (HeartBit or Cron), command, and schedule (picker + optional cron for Custom in HeartBit; cron line for Cron engine).
 5. Security note: task commands run with your current macOS user permissions.
 6. Verify execution in logs:
    - In-app execution output

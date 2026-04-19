@@ -150,7 +150,7 @@ class JobManager {
                 } else if job.scheduleInterval == .once {
                     job.nextExpectedRunDate = now
                 } else {
-                    job.nextExpectedRunDate = calculateNextRun(for: job, from: job.startDate)
+                    job.nextExpectedRunDate = advanceRun(for: job, from: job.startDate, passing: now)
                 }
                 jobs[idx] = job
             }
@@ -227,8 +227,16 @@ class JobManager {
     private func calculateNextRunFromCron(base: Date, expression: String?) -> Date? {
         guard let expression else { return nil }
         guard let cron = try? CronExpression(expression) else { return nil }
-        var cursor = base.addingTimeInterval(60)
         let cal = Calendar.current
+        let now = Date()
+        // Avoid scanning years minute-by-minute when `base` is stale.
+        var cursor = max(base, now)
+        if let minuteStart = cal.date(from: cal.dateComponents([.year, .month, .day, .hour, .minute], from: cursor)) {
+            cursor = minuteStart
+        }
+        if cursor < now {
+            cursor = cal.date(byAdding: .minute, value: 1, to: cursor) ?? cursor.addingTimeInterval(60)
+        }
         let maxIterations = 366 * 24 * 60
         for _ in 0..<maxIterations {
             let comps = cal.dateComponents([.minute, .hour, .day, .month, .weekday], from: cursor)
@@ -273,11 +281,41 @@ class JobManager {
 
     private func advanceRun(for job: HeartBitJob, from base: Date, passing target: Date) -> Date {
         var current = base
-        while current <= target {
-            if let next = calculateNextRun(for: job, from: current) { current = next }
-            else { break }
+        if current > target { return current }
+
+        // Fast-forward when the anchor is far in the past (single-step `calculateNextRun(from: startDate)` would stay behind `now` and trigger immediate runs).
+        switch job.scheduleInterval {
+        case .once:
+            return base
+        case .minute, .fiveMinutes:
+            let step: TimeInterval = job.scheduleInterval == .minute ? 60 : 300
+            let gap = target.timeIntervalSince(current)
+            let n = Int(ceil(gap / step))
+            return current.addingTimeInterval(TimeInterval(n) * step)
+        case .hour, .day, .week, .month, .custom:
+            var safety = 0
+            while current <= target && safety < 500_000 {
+                guard let next = calculateNextRun(for: job, from: current) else { return current }
+                current = next
+                safety += 1
+            }
+            return current
         }
-        return current
+    }
+
+    /// Recomputes the next HeartBit fire time (e.g. after editing the schedule in the UI).
+    func rescheduleHeartBitJob(at index: Int) {
+        guard jobs.indices.contains(index), jobs[index].executionMode == .heartbit else { return }
+        if jobs[index].scheduleInterval == .once {
+            let start = jobs[index].startDate
+            let now = Date()
+            jobs[index].nextExpectedRunDate = now < start ? start : now
+        } else {
+            let job = jobs[index]
+            jobs[index].nextExpectedRunDate = advanceRun(for: job, from: job.startDate, passing: Date())
+        }
+        saveJobs()
+        checkSchedules()
     }
     
     // MARK: - Lifecycle
@@ -444,6 +482,42 @@ class JobManager {
 
         saveJobs()
         syncCronJobsImmediately()
+    }
+
+    /// Writes minute/hour from `startDate` into a 5-field cron string, and optionally day/month/weekday when `updateCalendarFields` is true.
+    /// Preserves fields that use steps (`/`), lists (`,`), or ranges (`-`).
+    static func mergeStartDateIntoCronExpression(_ expression: String, startDate: Date, updateCalendarFields: Bool) -> String {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmed.isEmpty ? cronExpression(from: .hour, startDate: startDate) : trimmed
+        let parts = base.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard parts.count == 5 else {
+            return cronExpression(from: .hour, startDate: startDate)
+        }
+        var fields = parts
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.minute, .hour, .day, .month, .weekday], from: startDate)
+        let minute = comps.minute ?? 0
+        let hour = comps.hour ?? 0
+        let day = comps.day ?? 1
+        let month = comps.month ?? 1
+        let weekday = ((comps.weekday ?? 1) + 6) % 7
+
+        func patchField(_ index: Int, value: Int) {
+            let f = fields[index]
+            if f.contains("/") || f.contains(",") || f.contains("-") { return }
+            if f == "*" || Int(f) != nil {
+                fields[index] = "\(value)"
+            }
+        }
+
+        patchField(0, value: minute)
+        patchField(1, value: hour)
+        if updateCalendarFields {
+            patchField(2, value: day)
+            patchField(3, value: month)
+            patchField(4, value: weekday)
+        }
+        return fields.joined(separator: " ")
     }
 
     static func cronExpression(from interval: ScheduleInterval, startDate: Date) -> String {
