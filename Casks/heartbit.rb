@@ -1,6 +1,6 @@
 cask "heartbit" do
   version "1.4.0"
-  sha256 "a24d5da76413be2477e5d0173f98752089fa06e706e7edb5b5c0f9610567ba37"
+  sha256 "048c0679d6c05dc258b891c811cc7e60e4c8aa3c66e025ed6ffc3aaf8e4be877"
 
   url "https://github.com/ivans3m/homebrew-HeartBit/releases/download/v#{version}/HeartBit-v#{version}.zip"
   name "HeartBit"
