@@ -196,9 +196,7 @@ class JobManager {
             }
             
             if let expected = job.nextExpectedRunDate, now >= expected {
-                // If PAUSED globally, we advance the tracker but do NOT enqueue.
-                // Actually, if paused, we should probably let time pass but queue them when unpaused?
-                // The easiest is: do nothing. When unpaused, it will cleanly handle missed-run catchup!
+                // Globally paused: do not enqueue; leave nextExpectedRunDate unchanged until unpaused.
                 guard !isExecutionPaused else { continue }
                 handleMissedAndRun(jobIndex: idx, now: now)
             }
