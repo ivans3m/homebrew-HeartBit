@@ -91,6 +91,7 @@ struct HeartBitApp: App {
                 openWindow(id: "settings")
                 NSApp.activate(ignoringOtherApps: true)
                 updateActivationPolicy()
+                scheduleActivationPolicyRefreshAfterOpeningSettings()
             }
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
@@ -134,32 +135,37 @@ struct HeartBitApp: App {
         }
     }
     
+    /// When "Show in Dock" is off, we only keep `.regular` while a real window is on-screen.
+    /// Do not treat `title == "Settings"` alone as sufficient: SwiftUI can retain ordered-out
+    /// host windows in `NSApp.windows`, which would prevent returning to `.accessory` after close.
+    private func hasVisibleNonStatusBarWindow() -> Bool {
+        NSApp.windows.contains { window in
+            guard window.className != "NSStatusBarWindow" else { return false }
+            return window.isVisible
+        }
+    }
+    
     private func updateActivationPolicy() {
         if jobManager.showInDock {
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
             return
         }
-        let hasCandidateWindow = NSApp.windows.contains { window in
-            guard window.className != "NSStatusBarWindow" else { return false }
-            if window.isVisible { return true }
-            if window.title == "Settings" { return true }
-            return false
-        }
-        if hasCandidateWindow {
+        if hasVisibleNonStatusBarWindow() {
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
         ActivationPolicyDebouncer.schedule {
             guard !self.jobManager.showInDock else { return }
-            let stillHasWindow = NSApp.windows.contains { window in
-                guard window.className != "NSStatusBarWindow" else { return false }
-                return window.isVisible || window.title == "Settings"
-            }
-            if !stillHasWindow {
+            if !self.hasVisibleNonStatusBarWindow() {
                 NSApp.setActivationPolicy(.accessory)
             }
         }
+    }
+    
+    /// One tick after `openWindow` so the Settings `NSWindow` is usually visible before we decide policy.
+    private func scheduleActivationPolicyRefreshAfterOpeningSettings() {
+        DispatchQueue.main.async { self.updateActivationPolicy() }
     }
     
     private func openJobSettings(id: UUID) {
@@ -167,6 +173,7 @@ struct HeartBitApp: App {
         openWindow(id: "settings")
         NSApp.activate(ignoringOtherApps: true)
         updateActivationPolicy()
+        scheduleActivationPolicyRefreshAfterOpeningSettings()
     }
 }
 
