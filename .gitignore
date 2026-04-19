@@ -64,3 +64,6 @@ xcodegen.zip
 
 # Release artifacts
 Release/
+
+# Cursor IDE (local only)
+.cursor/
