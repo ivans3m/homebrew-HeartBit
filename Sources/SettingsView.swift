@@ -101,7 +101,8 @@ struct SettingsView: View {
             let now = Date()
             let cal = Calendar.current
             var comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: now)
-            comps.minute = ((comps.minute ?? 0) / 5) * 5 + 10 // +5 buffer + up to next 5
+            let period = JobManager.normalizedDefaultPeriod(jobManager.defaultPeriodMinutes)
+            comps.minute = ((comps.minute ?? 0) / period) * period + (period * 2) // +1 period buffer + up to next period
             if let nextSlot = cal.date(from: comps) { newJob.startDate = nextSlot }
         }
         jobManager.addJob(newJob)
@@ -113,6 +114,7 @@ private func sidebarIcon(for job: HeartBitJob) -> String {
     if job.executionMode == .cron { return "circle.dotted" }
     if !job.isEnabled { return "pause.circle" }
     if job.isRunning { return "arrow.triangle.2.circlepath" }
+    if job.lastRunStatus == .delayed { return "clock.badge.exclamationmark" }
     if job.lastRunStatus == .success { return "circle.fill" }
     if job.lastRunStatus == .failed { return "circle.fill" }
     return "circle"
@@ -121,6 +123,7 @@ private func sidebarIcon(for job: HeartBitJob) -> String {
 private func sidebarIconColor(for job: HeartBitJob) -> Color {
     if job.executionMode == .cron { return .secondary }
     if job.isRunning { return .yellow }
+    if job.lastRunStatus == .delayed { return .orange }
     if job.lastRunStatus == .success { return .green }
     if job.lastRunStatus == .failed { return .red }
     return .secondary
@@ -144,7 +147,7 @@ struct AboutView: View {
                 .frame(width: 100, height: 100)
                 .cornerRadius(20)
             
-            Text("HeartBit v1.4.0")
+            Text("HeartBit v1.4.1")
                 .font(.largeTitle).bold()
             
             Text("HeartBit is a minimal, robust personal task runner for macOS that lives quietly in your menu bar. Built with native Swift and modern SwiftUI, it allows you to schedule scripts, apps, and shell commands just like cron, but with an elegant native Mac interface.")
@@ -203,6 +206,31 @@ struct GlobalSettingsView: View {
                 
                 Toggle("Show app in Dock", isOn: Bindable(jobManager).showInDock)
             } header: { Text("System Features") }
+            .padding(.bottom, 16)
+
+            Section {
+                LabeledContent("Default Period (minutes)") {
+                    HStack(spacing: 8) {
+                        TextField(
+                            "",
+                            value: Bindable(jobManager).defaultPeriodMinutes,
+                            format: .number
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .multilineTextAlignment(.trailing)
+                        Stepper(
+                            "",
+                            value: Bindable(jobManager).defaultPeriodMinutes,
+                            in: 1...1440
+                        )
+                        .labelsHidden()
+                    }
+                }
+                Text("Used for default scheduling slots when creating a new job.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: { Text("Scheduling") }
             .padding(.bottom, 16)
             
             Section {
@@ -424,6 +452,9 @@ struct CronJobsView: View {
         if job.scheduleInterval == .custom, !job.customCronExpression.isEmpty {
             return "Custom: \(job.customCronExpression)"
         }
+        if job.scheduleInterval == .defaultPeriod {
+            return "Every \(jobManager.defaultPeriodMinutes) minutes (Default period)"
+        }
         return job.scheduleInterval.rawValue
     }
 }
@@ -570,31 +601,33 @@ struct JobDetailView: View {
                             }
                             
                             VStack(alignment: .leading, spacing: 6) {
-                                HStack(alignment: .center, spacing: 8) {
-                                    if jobManager.jobs[idx].executionMode == .heartbit {
-                                        Picker("Run every:", selection: scheduleIntervalBinding) {
-                                            ForEach(ScheduleInterval.allCases) { interval in
-                                                Text(interval.rawValue).tag(interval)
+                                if jobManager.jobs[idx].executionMode == .heartbit {
+                                    LabeledContent("Run every:") {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Picker("", selection: scheduleIntervalBinding) {
+                                                ForEach(ScheduleInterval.allCases) { interval in
+                                                    Text(interval.rawValue).tag(interval)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .frame(maxWidth: 280, alignment: .leading)
+                                            if jobManager.jobs[idx].scheduleInterval == .custom {
+                                                TextField("", text: cronExpressionBinding)
+                                                    .font(.system(.body, design: .monospaced))
+                                                    .textFieldStyle(.roundedBorder)
+                                                    .frame(width: 280, alignment: .leading)
+                                                    .multilineTextAlignment(.leading)
                                             }
                                         }
-                                        .frame(maxWidth: 280, alignment: .leading)
-                                        if jobManager.jobs[idx].scheduleInterval == .custom {
-                                            TextField("", text: cronExpressionBinding)
-                                                .font(.system(.body, design: .monospaced))
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(width: 220, alignment: .leading)
-                                                .multilineTextAlignment(.leading)
-                                        }
-                                    } else {
-                                        Text("Run every (cron):")
-                                            .fixedSize()
+                                    }
+                                } else {
+                                    LabeledContent("Run every (cron):") {
                                         TextField("", text: cronExpressionBinding)
                                             .font(.system(.body, design: .monospaced))
                                             .textFieldStyle(.roundedBorder)
-                                            .frame(width: 220, alignment: .leading)
+                                            .frame(width: 280, alignment: .leading)
                                             .multilineTextAlignment(.leading)
                                     }
-                                    Spacer(minLength: 0)
                                 }
                                 if jobManager.jobs[idx].scheduleInterval == .once && jobManager.jobs[idx].executionMode == .heartbit {
                                     Text("Runs once, then stops.")
@@ -605,6 +638,12 @@ struct JobDetailView: View {
                             if jobManager.jobs[idx].executionMode == .heartbit {
                                 Picker("Missed Run Policy:", selection: Bindable(jobManager).jobs[idx].missedRunPolicy) {
                                     ForEach(MissedRunPolicy.allCases) { policy in Text(policy.rawValue).tag(policy) }
+                                }
+                                Toggle("Online only", isOn: Bindable(jobManager).jobs[idx].isOnlineOnly)
+                                if jobManager.jobs[idx].isOnlineOnly {
+                                    Text("When offline, scheduled runs are delayed and retried every Default Period.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
                             } else {
                                 HStack {
@@ -623,6 +662,10 @@ struct JobDetailView: View {
                                     Text("Next Scheduled Run: \(nextRun.formatted())")
                                         .foregroundStyle(.secondary)
                                 }
+                            }
+                            if jobManager.jobs[idx].lastRunStatus == .delayed {
+                                Text("Last scheduled run was delayed while offline.")
+                                    .foregroundStyle(.secondary)
                             }
                             if let lastRun = jobManager.jobs[idx].lastRunDate {
                                 Text("Last Run: \(lastRun.formatted())")
@@ -746,8 +789,31 @@ struct JobDetailView: View {
 
     private func applyModeChange(idx: Int, mode: JobExecutionMode) {
         jobManager.jobs[idx].executionMode = mode
-        if mode == .cron && jobManager.jobs[idx].customCronExpression.isEmpty {
-            jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(from: jobManager.jobs[idx].scheduleInterval, startDate: jobManager.jobs[idx].startDate)
+        if mode == .cron {
+            let interval = jobManager.jobs[idx].scheduleInterval
+            if interval == .defaultPeriod {
+                let minutes = jobManager.defaultPeriodMinutes
+                jobManager.jobs[idx].customCronExpression = JobManager.cronExpressionForDefaultPeriod(
+                    minutes: minutes,
+                    startDate: jobManager.jobs[idx].startDate
+                )
+                jobManager.jobs[idx].scheduleInterval = .custom
+            } else if interval == .custom {
+                let existing = jobManager.jobs[idx].customCronExpression
+                let baseExpression = existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? JobManager.cronExpression(from: .hour, startDate: jobManager.jobs[idx].startDate)
+                    : existing
+                jobManager.jobs[idx].customCronExpression = JobManager.mergeStartDateIntoCronExpression(
+                    baseExpression,
+                    startDate: jobManager.jobs[idx].startDate,
+                    updateCalendarFields: false
+                )
+            } else {
+                jobManager.jobs[idx].customCronExpression = JobManager.cronExpression(
+                    from: interval,
+                    startDate: jobManager.jobs[idx].startDate
+                )
+            }
         }
         jobManager.saveJobs()
         DispatchQueue.main.async {

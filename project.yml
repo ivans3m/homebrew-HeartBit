@@ -14,8 +14,8 @@ targets:
       properties:
         LSUIElement: true
         CFBundleIdentifier: "com.s3m.HeartBit"
-        CFBundleShortVersionString: "1.4.0"
-        CFBundleVersion: "9"
+        CFBundleShortVersionString: "1.4.1"
+        CFBundleVersion: "10"
     settings:
       base:
         PRODUCT_NAME: HeartBit

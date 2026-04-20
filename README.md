@@ -13,9 +13,10 @@ HeartBit runs your automation tasks on schedule in the background, with logging 
 - **Run every**: In **HeartBit** mode, choose **Run every:** from a picker (**Once**, common intervals, or **Custom**). The **5-field cron** field (`minute hour day month weekday`) appears only for **Custom**; preset intervals stay in the picker without exposing raw cron unless you need it. In **Cron** mode, you edit the cron line directly (what gets written to your user `crontab`).
 - **Start & anchor time**: For **Once**, use **Start:** (calendar) and **Time** for the single run. For recurring schedules, only **Time (anchor)** is shown; it sets the clock anchor presets use (for example “every day at 09:30”). Changing **Start** or time updates the stored cron for **Cron** jobs and for **HeartBit + Custom** (simple fields are updated; steps like `*/5` and lists/ranges are left as-is). If you pick a clock time on **today** that is already in the past (common with a time-only control that keeps today’s date), HeartBit rolls the stored date forward by one day so the anchor means the **next** occurrence—typically **tomorrow** at that time—instead of firing immediately or staying in the past.
 - **Execution controls**: In **Global Settings**, **PAUSED** stops all **HeartBit**-scheduled runs app-wide. Each job can also be turned off with **Enable Job** (or the sidebar toggle; disabled jobs show a pause icon). While paused or disabled, the background scheduler does **not** enqueue runs—editing a schedule or anchor time will not start a job. While **globally paused**, recurring HeartBit jobs still **advance their next run time** (same idea as “skip missed”), so **missed-run and catch-up policies do not stack** during the pause; when you resume, you get the next scheduled slot—not a burst of catch-up. **Once** jobs stay due while paused and run when you resume if their time has passed. Manual **Run** / **Dry-Run** are disabled when execution is globally paused; they are still available for disabled jobs if you explicitly want a one-off run. **Cron**-engine jobs are driven by the system `crontab` when enabled, independent of HeartBit’s internal timer.
+- **Online-only jobs**: In **HeartBit** mode, each job can enable **Online only**. When enabled, scheduled and missed runs wait for internet connectivity; if offline at run time, HeartBit marks the job as delayed and retries after the **Default Period** interval. Manual **Run Job** and **Dry-Run Now** still execute immediately.
 - **Precise Scheduling**: One-off runs use calendar + time; repeating jobs combine the time anchor with the chosen interval or custom cron.
 - **Sequential Pipeline**: Overlapping tasks queue safely in the background instead of competing for system resources. Watchdog timeouts automatically kill and report hanging scripts.
-- **Missed Run Policies**: If your Mac is asleep during a scheduled run, HeartBit can catch up automatically or run once after wake.
+- **Missed Run Policies**: If your Mac is asleep during a scheduled run, HeartBit can catch up automatically or run once after wake. For jobs with **Online only** enabled, those scheduled/missed executions are deferred while offline and retried on the Default Period cadence.
 - **Dynamic Dock Icon**: The app stays out of the way until needed, then shows its Dock icon when you open settings for easier window management.
 - **Robust Local Logging**: Captures stdout and stderr from every run and stores logs in `~/Library/Logs/HeartBit/HeartBit.log` with configurable retention.
 
@@ -60,7 +61,7 @@ brew uninstall --zap --cask heartbit
 ```
 
 ### Download and run on macOS
-1. Go to the [GitHub Releases](https://github.com/ivans3m/homebrew-HeartBit/releases) page and download the latest `HeartBit-v<version>.zip` (for example `HeartBit-v1.4.0.zip`).
+1. Go to the [GitHub Releases](https://github.com/ivans3m/homebrew-HeartBit/releases) page and download the latest `HeartBit-v<version>.zip` (for example `HeartBit-v1.4.1.zip`).
 2. Open the archive and drag `HeartBit.app` into your `/Applications` folder.
 3. On first launch, macOS may warn that HeartBit is from an unidentified developer because it is distributed outside the App Store.
 4. To open it the first time, go to `/Applications`, right-click `HeartBit.app`, choose **Open**, and confirm.
@@ -129,9 +130,9 @@ Automated pipeline: bump version and build number in `project.yml`, build the zi
 **Requirements:** Xcode, XcodeGen, `gh` CLI (`gh auth login`), clean git status (unless `--allow-dirty`). Homebrew is optional but recommended for `brew audit --cask`.
 
 ```bash
-./scripts/publish_release.sh --dry-run 1.4.0   # preview release notes; no changes
-./scripts/publish_release.sh 1.4.0             # optional second arg: CFBundleVersion integer
-./scripts/publish_release.sh --no-push --notes-out ./release-notes.md 1.4.0   # save notes if not using gh yet
+./scripts/publish_release.sh --dry-run 1.4.1   # preview release notes; no changes
+./scripts/publish_release.sh 1.4.1             # optional second arg: CFBundleVersion integer
+./scripts/publish_release.sh --no-push --notes-out ./release-notes.md 1.4.1   # save notes if not using gh yet
 ```
 
 For a detailed release checklist, see [.cursor/skills/heartbit-release/SKILL.md](.cursor/skills/heartbit-release/SKILL.md).

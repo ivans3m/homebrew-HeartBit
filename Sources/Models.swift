@@ -12,10 +12,12 @@ enum JobStatus: String, Codable, Equatable {
     case running
     case success
     case failed
+    case delayed
 }
 
 enum ScheduleInterval: String, Codable, CaseIterable, Identifiable {
     case once = "Once"
+    case defaultPeriod = "Default period"
     case minute = "Every minute"
     case fiveMinutes = "Every 5 minutes"
     case hour = "Every hour"
@@ -117,6 +119,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     var didConfirmHeartBitSwitch: Bool = false
     var startDate: Date = Date()
     var missedRunPolicy: MissedRunPolicy = .skip
+    var isOnlineOnly: Bool = false
     
     var lastRunDate: Date?
     var nextExpectedRunDate: Date?
@@ -127,7 +130,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     var isRunning: Bool = false
     
     private enum CodingKeys: String, CodingKey {
-        case id, name, command, isEnabled, scheduleInterval, executionMode, customCronExpression, isImportedFromExternalCron, didConfirmHeartBitSwitch, startDate, missedRunPolicy, lastRunDate, nextExpectedRunDate, lastRunStatus, latestOutput
+        case id, name, command, isEnabled, scheduleInterval, executionMode, customCronExpression, isImportedFromExternalCron, didConfirmHeartBitSwitch, startDate, missedRunPolicy, isOnlineOnly, lastRunDate, nextExpectedRunDate, lastRunStatus, latestOutput
     }
 
     init(id: UUID = UUID(),
@@ -141,6 +144,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
          didConfirmHeartBitSwitch: Bool = false,
          startDate: Date = Date(),
          missedRunPolicy: MissedRunPolicy = .skip,
+         isOnlineOnly: Bool = false,
          lastRunDate: Date? = nil,
          nextExpectedRunDate: Date? = nil,
          lastRunStatus: JobStatus = .idle,
@@ -157,6 +161,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         self.didConfirmHeartBitSwitch = didConfirmHeartBitSwitch
         self.startDate = startDate
         self.missedRunPolicy = missedRunPolicy
+        self.isOnlineOnly = isOnlineOnly
         self.lastRunDate = lastRunDate
         self.nextExpectedRunDate = nextExpectedRunDate
         self.lastRunStatus = lastRunStatus
@@ -177,6 +182,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         didConfirmHeartBitSwitch = try container.decodeIfPresent(Bool.self, forKey: .didConfirmHeartBitSwitch) ?? false
         startDate = try container.decodeIfPresent(Date.self, forKey: .startDate) ?? Date()
         missedRunPolicy = try container.decodeIfPresent(MissedRunPolicy.self, forKey: .missedRunPolicy) ?? .skip
+        isOnlineOnly = try container.decodeIfPresent(Bool.self, forKey: .isOnlineOnly) ?? false
         lastRunDate = try container.decodeIfPresent(Date.self, forKey: .lastRunDate)
         nextExpectedRunDate = try container.decodeIfPresent(Date.self, forKey: .nextExpectedRunDate)
         lastRunStatus = try container.decodeIfPresent(JobStatus.self, forKey: .lastRunStatus) ?? .idle
@@ -197,6 +203,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         try container.encode(didConfirmHeartBitSwitch, forKey: .didConfirmHeartBitSwitch)
         try container.encode(startDate, forKey: .startDate)
         try container.encode(missedRunPolicy, forKey: .missedRunPolicy)
+        try container.encode(isOnlineOnly, forKey: .isOnlineOnly)
         try container.encode(lastRunDate, forKey: .lastRunDate)
         try container.encode(nextExpectedRunDate, forKey: .nextExpectedRunDate)
         try container.encode(lastRunStatus, forKey: .lastRunStatus)

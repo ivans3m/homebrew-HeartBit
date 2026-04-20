@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AppKit
+import Network
 
 @Observable
 class JobManager {
@@ -32,6 +33,17 @@ class JobManager {
     var logRetentionDays: Int = 30 {
         didSet { UserDefaults.standard.set(logRetentionDays, forKey: "HB_LogRetentionDays") }
     }
+    var defaultPeriodMinutes: Int = 5 {
+        didSet {
+            let normalized = Self.normalizedDefaultPeriod(defaultPeriodMinutes)
+            if normalized != defaultPeriodMinutes {
+                defaultPeriodMinutes = normalized
+                return
+            }
+            UserDefaults.standard.set(normalized, forKey: "HB_DefaultPeriodMinutes")
+            rescheduleJobsUsingDefaultPeriod()
+        }
+    }
     
     var isAnyJobRunning: Bool { jobs.contains { $0.isRunning } }
     
@@ -43,6 +55,8 @@ class JobManager {
     @ObservationIgnored private var executionQueue: [(UUID, Bool)] = []
     @ObservationIgnored private var isWorkingQueue: Bool = false
     @ObservationIgnored private var scheduledCronSync: DispatchWorkItem?
+    @ObservationIgnored private let networkMonitor = NWPathMonitor()
+    @ObservationIgnored private let networkMonitorQueue = DispatchQueue(label: "com.s3m.HeartBit.networkMonitor")
     
     init() {
         let libraryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
@@ -54,12 +68,19 @@ class JobManager {
         self.showInDock = UserDefaults.standard.object(forKey: "HB_ShowInDock") as? Bool ?? false
         self.logActivity = UserDefaults.standard.object(forKey: "HB_LogActivity") as? Bool ?? true
         self.logRetentionDays = UserDefaults.standard.object(forKey: "HB_LogRetentionDays") as? Int ?? 30
+        let savedDefaultPeriod = UserDefaults.standard.object(forKey: "HB_DefaultPeriodMinutes") as? Int ?? 5
+        self.defaultPeriodMinutes = Self.normalizedDefaultPeriod(savedDefaultPeriod)
         
         loadJobs()
         mergeWithCrontab()
+        setupNetworkMonitor()
         setupTimer()
         setupWakeListener()
         purgeOldLogs()
+    }
+    
+    deinit {
+        networkMonitor.cancel()
     }
     
     // MARK: - Logging
@@ -225,9 +246,10 @@ class JobManager {
         
         if job.scheduleInterval == .once {
             let id = job.id
-            enqueueJob(id: id, isDryRun: false, fromScheduler: true)
-            jobs[jobIndex].isEnabled = false
-            jobs[jobIndex].nextExpectedRunDate = nil
+            if enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: id, now: now) {
+                jobs[jobIndex].isEnabled = false
+                jobs[jobIndex].nextExpectedRunDate = nil
+            }
             return
         }
         
@@ -242,15 +264,40 @@ class JobManager {
                 jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
             case .runOnce:
                 jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
-                enqueueJob(id: job.id, isDryRun: false, fromScheduler: true)
+                _ = enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now)
             case .catchUp:
                 jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
-                for _ in 0...missedCount { enqueueJob(id: job.id, isDryRun: false, fromScheduler: true) }
+                if job.isOnlineOnly {
+                    guard enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now) else { return }
+                    for _ in 1...missedCount {
+                        enqueueJob(id: job.id, isDryRun: false, fromScheduler: true)
+                    }
+                } else {
+                    for _ in 0...missedCount { enqueueJob(id: job.id, isDryRun: false, fromScheduler: true) }
+                }
             }
         } else {
             jobs[jobIndex].nextExpectedRunDate = nextStep
-            enqueueJob(id: job.id, isDryRun: false, fromScheduler: true)
+            _ = enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now)
         }
+    }
+
+    private func enqueueOrDelayForOnline(jobIndex: Int, jobId: UUID, now: Date) -> Bool {
+        guard jobs.indices.contains(jobIndex) else { return false }
+        let job = jobs[jobIndex]
+        if !job.isOnlineOnly {
+            enqueueJob(id: jobId, isDryRun: false, fromScheduler: true)
+            return true
+        }
+        guard currentInternetOnlineState() else {
+            let retryDelay = TimeInterval(defaultPeriodMinutes * 60)
+            jobs[jobIndex].lastRunStatus = .delayed
+            jobs[jobIndex].nextExpectedRunDate = now.addingTimeInterval(retryDelay)
+            appendLog("DELAYED - \(job.name) (Online only enabled, internet offline; retry in \(defaultPeriodMinutes) minute(s))")
+            return false
+        }
+        enqueueJob(id: jobId, isDryRun: false, fromScheduler: true)
+        return true
     }
     
     private func calculateNextRun(from base: Date, interval: ScheduleInterval) -> Date? {
@@ -268,6 +315,7 @@ class JobManager {
         case .once: return nil
         case .minute: return cal.date(byAdding: .minute, value: 1, to: base)
         case .fiveMinutes: return cal.date(byAdding: .minute, value: 5, to: base)
+        case .defaultPeriod: return cal.date(byAdding: .minute, value: defaultPeriodMinutes, to: base)
         case .hour: return cal.date(byAdding: .hour, value: 1, to: base)
         case .day: return cal.date(byAdding: .day, value: 1, to: base)
         case .week: return cal.date(byAdding: .day, value: 7, to: base)
@@ -340,8 +388,19 @@ class JobManager {
         switch job.scheduleInterval {
         case .once:
             return base
-        case .minute, .fiveMinutes:
-            let step: TimeInterval = job.scheduleInterval == .minute ? 60 : 300
+        case .minute, .fiveMinutes, .defaultPeriod:
+            let stepMinutes: Int
+            switch job.scheduleInterval {
+            case .minute:
+                stepMinutes = 1
+            case .fiveMinutes:
+                stepMinutes = 5
+            case .defaultPeriod:
+                stepMinutes = defaultPeriodMinutes
+            default:
+                stepMinutes = 1
+            }
+            let step = TimeInterval(stepMinutes * 60)
             let gap = target.timeIntervalSince(current)
             let n = Int(ceil(gap / step))
             return current.addingTimeInterval(TimeInterval(n) * step)
@@ -391,6 +450,15 @@ class JobManager {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: nil) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { self?.checkSchedules() }
         }
+    }
+    
+    private func setupNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { _ in }
+        networkMonitor.start(queue: networkMonitorQueue)
+    }
+    
+    private func currentInternetOnlineState() -> Bool {
+        networkMonitor.currentPath.status == .satisfied
     }
     
     // MARK: - Execution Engine (Pipeline)
@@ -593,6 +661,7 @@ class JobManager {
         let hour = comps.hour ?? 0
         let day = comps.day ?? 1
         let weekday = ((comps.weekday ?? 1) + 6) % 7
+        let defaultPeriod = JobManager.shared.defaultPeriodMinutes
         switch interval {
         case .once:
             return "\(minute) \(hour) \(day) * \(weekday)"
@@ -600,6 +669,8 @@ class JobManager {
             return "* * * * *"
         case .fiveMinutes:
             return "*/5 * * * *"
+        case .defaultPeriod:
+            return cronExpressionForDefaultPeriod(minutes: defaultPeriod, startDate: startDate)
         case .hour:
             return "\(minute) * * * *"
         case .day:
@@ -610,6 +681,53 @@ class JobManager {
             return "\(minute) \(hour) \(day) * *"
         case .custom:
             return "* * * * *"
+        }
+    }
+
+    static func normalizedDefaultPeriod(_ minutes: Int) -> Int {
+        min(max(1, minutes), 1440)
+    }
+
+    static func cronExpressionForDefaultPeriod(minutes: Int, startDate: Date) -> String {
+        let normalized = normalizedDefaultPeriod(minutes)
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.minute, .hour], from: startDate)
+        let minute = comps.minute ?? 0
+        let hour = comps.hour ?? 0
+
+        if normalized < 60 {
+            return "*/\(normalized) * * * *"
+        }
+        if normalized % 60 == 0 {
+            let hours = normalized / 60
+            if hours < 24 {
+                return "\(minute) */\(hours) * * *"
+            }
+            if hours % 24 == 0 {
+                let days = max(1, min(hours / 24, 31))
+                return "\(minute) \(hour) */\(days) * *"
+            }
+        }
+        // Mixed day/hour/minute intervals cannot be represented exactly in 5-field cron.
+        // Fallback to a stable daily time anchored to startDate.
+        return "\(minute) \(hour) * * *"
+    }
+
+    private func rescheduleJobsUsingDefaultPeriod() {
+        var shouldSyncCron = false
+        for idx in jobs.indices {
+            if jobs[idx].scheduleInterval == .defaultPeriod {
+                jobs[idx].customCronExpression = Self.cronExpression(from: .defaultPeriod, startDate: jobs[idx].startDate)
+                if jobs[idx].executionMode == .heartbit {
+                    jobs[idx].nextExpectedRunDate = advanceRun(for: jobs[idx], from: jobs[idx].startDate, passing: Date())
+                }
+                shouldSyncCron = true
+            }
+        }
+        if shouldSyncCron {
+            saveJobs()
+            checkSchedules()
+            syncCronJobsNow()
         }
     }
 }
