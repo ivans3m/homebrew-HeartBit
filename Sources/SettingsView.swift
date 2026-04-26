@@ -205,6 +205,10 @@ struct GlobalSettingsView: View {
                     }
                 
                 Toggle("Show app in Dock", isOn: Bindable(jobManager).showInDock)
+                
+                Button("Request Camera Access") {
+                    jobManager.requestCameraAccessFromApp()
+                }
             } header: { Text("System Features") }
             .padding(.bottom, 16)
 

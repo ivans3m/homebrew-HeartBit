@@ -16,6 +16,7 @@ targets:
         CFBundleIdentifier: "com.s3m.HeartBit"
         CFBundleShortVersionString: "1.4.1"
         CFBundleVersion: "10"
+        NSCameraUsageDescription: "HeartBit needs camera access to capture webcam photos for automation workflows."
     settings:
       base:
         PRODUCT_NAME: HeartBit

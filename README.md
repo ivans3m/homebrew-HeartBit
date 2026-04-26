@@ -89,6 +89,16 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
 - **Task did not run**: confirm schedule, Mac sleep state, and check logs for stdout/stderr details.
 - **“HeartBit wants to administer your computer” (or similar) when saving Cron jobs**: macOS shows this when the app updates your user `crontab`. The system decides whether to prompt; HeartBit cannot store an “always allow” answer inside the app. After you approve once, you should see fewer prompts; HeartBit also avoids rewriting `crontab` when nothing changed and batches rapid edits. If prompts persist, check **System Settings → Privacy & Security** for anything still pending for HeartBit, and ensure you are not running multiple copies of the app.
 
+### Camera permission (webcam commands)
+- HeartBit defines camera privacy text in `project.yml` under `targets.HeartBit.info.properties.NSCameraUsageDescription` (XcodeGen source of truth for the app target plist).
+- If you need to retest the permission flow, reset TCC camera permissions:
+
+```bash
+tccutil reset Camera
+```
+
+- On first camera access from HeartBit (for example **Global Settings → Request Camera Access** or a command like `imagesnap`), macOS should show a camera permission prompt for HeartBit. After approval, HeartBit should appear in **System Settings → Privacy & Security → Camera**.
+
 ### Build from source
 1. Clone the repository:
 

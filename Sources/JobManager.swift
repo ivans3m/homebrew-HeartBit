@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import AppKit
 import Network
+import AVFoundation
 
 @Observable
 class JobManager {
@@ -77,6 +78,7 @@ class JobManager {
         setupTimer()
         setupWakeListener()
         purgeOldLogs()
+        logStartupCameraAuthorizationStatus()
     }
     
     deinit {
@@ -101,6 +103,34 @@ class JobManager {
     
     func clearLogs() {
         try? FileManager.default.removeItem(at: logURL)
+    }
+
+    func cameraAuthorizationStateLabel() -> String {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            return "authorized"
+        case .denied, .restricted:
+            return "denied/restricted"
+        case .notDetermined:
+            return "notDetermined"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    func logStartupCameraAuthorizationStatus() {
+        appendLog("Startup camera authorization status: \(cameraAuthorizationStateLabel())")
+    }
+
+    func requestCameraAccessFromApp() {
+        let before = cameraAuthorizationStateLabel()
+        appendLog("Camera access request initiated (current status: \(before))")
+
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+            guard let self else { return }
+            let after = self.cameraAuthorizationStateLabel()
+            self.appendLog("Camera access request result: \(granted ? "granted" : "denied") (status now: \(after))")
+        }
     }
     
     private func purgeOldLogs() {
