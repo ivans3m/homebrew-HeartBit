@@ -56,6 +56,7 @@ class JobManager {
     @ObservationIgnored private var executionQueue: [(UUID, Bool)] = []
     @ObservationIgnored private var isWorkingQueue: Bool = false
     @ObservationIgnored private var scheduledCronSync: DispatchWorkItem?
+    @ObservationIgnored private var scheduledNetworkPathRecheck: DispatchWorkItem?
     @ObservationIgnored private let networkMonitor = NWPathMonitor()
     @ObservationIgnored private let networkMonitorQueue = DispatchQueue(label: "com.s3m.HeartBit.networkMonitor")
     
@@ -89,6 +90,7 @@ class JobManager {
     
     func appendLog(_ message: String) {
         guard logActivity else { return }
+        guard !shouldSkipFileLogging(for: message) else { return }
         let timestamp = Date().formatted(.iso8601)
         let logLine = "[\(timestamp)] \(message)\n"
         
@@ -99,6 +101,13 @@ class JobManager {
         } else {
             try? logLine.write(to: logURL, atomically: true, encoding: .utf8)
         }
+    }
+
+    private func shouldSkipFileLogging(for message: String) -> Bool {
+        let normalized = message.lowercased()
+        guard normalized.contains("pacer script") || normalized.contains("pacer") else { return false }
+        let keepKeywords = ["error", "failed", "warn", "warning"]
+        return !keepKeywords.contains(where: { normalized.contains($0) })
     }
     
     func clearLogs() {
@@ -252,11 +261,15 @@ class JobManager {
             }
             
             if let expected = job.nextExpectedRunDate, now >= expected {
+                if let retryAfter = job.onlineRetryAfterDate, now < retryAfter {
+                    continue
+                }
                 if isExecutionPaused {
                     // Do not enqueue or apply missed-run / catch-up while paused. For recurring jobs,
                     // advance nextExpectedRunDate as if misses were skipped so resuming does not burst catch-up.
                     if job.scheduleInterval != .once {
-                        job.nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
+                        job.nextExpectedRunDate = advanceRun(for: job, from: job.startDate, passing: now)
+                        job.onlineRetryAfterDate = nil
                         jobs[idx] = job
                     }
                     continue
@@ -291,24 +304,32 @@ class JobManager {
             let missedCount = Int(missedTime / intervalSeconds)
             switch job.missedRunPolicy {
             case .skip:
-                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
+                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: job.startDate, passing: now)
             case .runOnce:
-                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
-                _ = enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now)
+                let advanced = advanceRun(for: job, from: job.startDate, passing: now)
+                if enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now) {
+                    jobs[jobIndex].nextExpectedRunDate = advanced
+                }
             case .catchUp:
-                jobs[jobIndex].nextExpectedRunDate = advanceRun(for: job, from: expected, passing: now)
+                let advanced = advanceRun(for: job, from: job.startDate, passing: now)
                 if job.isOnlineOnly {
                     guard enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now) else { return }
+                    jobs[jobIndex].nextExpectedRunDate = advanced
                     for _ in 1...missedCount {
                         enqueueJob(id: job.id, isDryRun: false, fromScheduler: true)
                     }
                 } else {
+                    jobs[jobIndex].nextExpectedRunDate = advanced
                     for _ in 0...missedCount { enqueueJob(id: job.id, isDryRun: false, fromScheduler: true) }
                 }
             }
         } else {
-            jobs[jobIndex].nextExpectedRunDate = nextStep
-            _ = enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now)
+            let enqueued = enqueueOrDelayForOnline(jobIndex: jobIndex, jobId: job.id, now: now)
+            jobs[jobIndex].nextExpectedRunDate = ScheduleFirePolicy.nextExpectedOnTimeAfterEnqueueAttempt(
+                enqueued: enqueued,
+                expected: expected,
+                nextStep: nextStep
+            )
         }
     }
 
@@ -316,16 +337,21 @@ class JobManager {
         guard jobs.indices.contains(jobIndex) else { return false }
         let job = jobs[jobIndex]
         if !job.isOnlineOnly {
+            jobs[jobIndex].onlineRetryAfterDate = nil
             enqueueJob(id: jobId, isDryRun: false, fromScheduler: true)
             return true
         }
         guard currentInternetOnlineState() else {
-            let retryDelay = TimeInterval(defaultPeriodMinutes * 60)
+            let retryAt = ScheduleFirePolicy.offlineRetryAt(now: now, defaultPeriodMinutes: defaultPeriodMinutes)
             jobs[jobIndex].lastRunStatus = .delayed
-            jobs[jobIndex].nextExpectedRunDate = now.addingTimeInterval(retryDelay)
-            appendLog("DELAYED - \(job.name) (Online only enabled, internet offline; retry in \(defaultPeriodMinutes) minute(s))")
+            jobs[jobIndex].onlineRetryAfterDate = retryAt
+            appendLog("DELAYED - \(job.name) (Online only enabled, internet offline; retry in \(defaultPeriodMinutes) minute(s) at \(retryAt.formatted(.iso8601)))")
             return false
         }
+        if let retryAfter = jobs[jobIndex].onlineRetryAfterDate {
+            appendLog("ONLINE RETRY - \(job.name) (internet is available; retry gate \(retryAfter.formatted(.iso8601)))")
+        }
+        jobs[jobIndex].onlineRetryAfterDate = nil
         enqueueJob(id: jobId, isDryRun: false, fromScheduler: true)
         return true
     }
@@ -448,6 +474,7 @@ class JobManager {
     /// Recomputes the next HeartBit fire time (e.g. after editing the schedule in the UI).
     func rescheduleHeartBitJob(at index: Int) {
         guard jobs.indices.contains(index), jobs[index].executionMode == .heartbit else { return }
+        jobs[index].onlineRetryAfterDate = nil
         if jobs[index].scheduleInterval == .once {
             let start = jobs[index].startDate
             let now = Date()
@@ -483,7 +510,15 @@ class JobManager {
     }
     
     private func setupNetworkMonitor() {
-        networkMonitor.pathUpdateHandler = { _ in }
+        networkMonitor.pathUpdateHandler = { [weak self] _ in
+            guard let self else { return }
+            self.scheduledNetworkPathRecheck?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.checkSchedules()
+            }
+            self.scheduledNetworkPathRecheck = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        }
         networkMonitor.start(queue: networkMonitorQueue)
     }
     

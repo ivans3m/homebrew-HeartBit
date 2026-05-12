@@ -5,7 +5,6 @@ targets:
   HeartBit:
     type: application
     platform: macOS
-    scheme: {}
     deploymentTarget: "14.0"
     sources:
       - Sources
@@ -25,3 +24,26 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEAD_CODE_STRIPPING: "YES"
         ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+
+  HeartBitTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: HeartBit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+
+schemes:
+  HeartBit:
+    build:
+      targets:
+        HeartBit: all
+        HeartBitTests: [test]
+    test:
+      targets:
+        - HeartBitTests

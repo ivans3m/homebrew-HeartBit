@@ -667,6 +667,10 @@ struct JobDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            if let retryAfter = jobManager.jobs[idx].onlineRetryAfterDate {
+                                Text("Offline Retry After: \(retryAfter.formatted())")
+                                    .foregroundStyle(.secondary)
+                            }
                             if jobManager.jobs[idx].lastRunStatus == .delayed {
                                 Text("Last scheduled run was delayed while offline.")
                                     .foregroundStyle(.secondary)

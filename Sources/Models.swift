@@ -123,6 +123,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     
     var lastRunDate: Date?
     var nextExpectedRunDate: Date?
+    var onlineRetryAfterDate: Date?
     
     var lastRunStatus: JobStatus = .idle
     var latestOutput: String = "" // Retained for fast viewing, but full logs go to file
@@ -130,7 +131,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     var isRunning: Bool = false
     
     private enum CodingKeys: String, CodingKey {
-        case id, name, command, isEnabled, scheduleInterval, executionMode, customCronExpression, isImportedFromExternalCron, didConfirmHeartBitSwitch, startDate, missedRunPolicy, isOnlineOnly, lastRunDate, nextExpectedRunDate, lastRunStatus, latestOutput
+        case id, name, command, isEnabled, scheduleInterval, executionMode, customCronExpression, isImportedFromExternalCron, didConfirmHeartBitSwitch, startDate, missedRunPolicy, isOnlineOnly, lastRunDate, nextExpectedRunDate, onlineRetryAfterDate, lastRunStatus, latestOutput
     }
 
     init(id: UUID = UUID(),
@@ -147,6 +148,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
          isOnlineOnly: Bool = false,
          lastRunDate: Date? = nil,
          nextExpectedRunDate: Date? = nil,
+         onlineRetryAfterDate: Date? = nil,
          lastRunStatus: JobStatus = .idle,
          latestOutput: String = "",
          isRunning: Bool = false) {
@@ -164,6 +166,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         self.isOnlineOnly = isOnlineOnly
         self.lastRunDate = lastRunDate
         self.nextExpectedRunDate = nextExpectedRunDate
+        self.onlineRetryAfterDate = onlineRetryAfterDate
         self.lastRunStatus = lastRunStatus
         self.latestOutput = latestOutput
         self.isRunning = isRunning
@@ -185,6 +188,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         isOnlineOnly = try container.decodeIfPresent(Bool.self, forKey: .isOnlineOnly) ?? false
         lastRunDate = try container.decodeIfPresent(Date.self, forKey: .lastRunDate)
         nextExpectedRunDate = try container.decodeIfPresent(Date.self, forKey: .nextExpectedRunDate)
+        onlineRetryAfterDate = try container.decodeIfPresent(Date.self, forKey: .onlineRetryAfterDate)
         lastRunStatus = try container.decodeIfPresent(JobStatus.self, forKey: .lastRunStatus) ?? .idle
         latestOutput = try container.decodeIfPresent(String.self, forKey: .latestOutput) ?? ""
         isRunning = false
@@ -206,6 +210,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         try container.encode(isOnlineOnly, forKey: .isOnlineOnly)
         try container.encode(lastRunDate, forKey: .lastRunDate)
         try container.encode(nextExpectedRunDate, forKey: .nextExpectedRunDate)
+        try container.encode(onlineRetryAfterDate, forKey: .onlineRetryAfterDate)
         try container.encode(lastRunStatus, forKey: .lastRunStatus)
         try container.encode(latestOutput, forKey: .latestOutput)
     }

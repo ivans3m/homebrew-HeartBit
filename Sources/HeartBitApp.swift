@@ -241,7 +241,9 @@ func styling(for job: HeartBitJob, bucket: JobBucket) -> MenuJobStyle {
         dateString = displayDate.formatted(date: .omitted, time: .shortened)
     }
     
-    let isMissed = job.isEnabled && !job.isRunning && (job.nextExpectedRunDate != nil && job.nextExpectedRunDate! < Date())
+    let isMissed = job.isEnabled && !job.isRunning
+        && ((job.nextExpectedRunDate.map { $0 < Date() } ?? false)
+            || (job.lastRunStatus == .delayed && job.onlineRetryAfterDate != nil))
     
     var icon = ""
     var iconCol = grey
