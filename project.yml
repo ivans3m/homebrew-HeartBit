@@ -13,8 +13,8 @@ targets:
       properties:
         LSUIElement: true
         CFBundleIdentifier: "com.s3m.HeartBit"
-        CFBundleShortVersionString: "1.4.1"
-        CFBundleVersion: "10"
+        CFBundleShortVersionString: "1.5.0"
+        CFBundleVersion: "11"
         NSCameraUsageDescription: "HeartBit needs camera access to capture webcam photos for automation workflows."
         NSAppleEventsUsageDescription: "HeartBit needs Automation access to drive other apps (for example Notes, Calendar, Finder) for scheduled jobs you configure."
     settings:
