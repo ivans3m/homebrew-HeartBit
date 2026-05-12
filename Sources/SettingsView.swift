@@ -142,14 +142,20 @@ func formatSidebarDate(_ date: Date) -> String {
 }
 
 struct AboutView: View {
+    private static var displayedVersion: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        return "HeartBit v\(short)"
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             Image("AppIcon")
                 .resizable()
                 .frame(width: 100, height: 100)
                 .cornerRadius(20)
-            
-            Text("HeartBit v1.4.1")
+
+            Text(Self.displayedVersion)
                 .font(.largeTitle).bold()
             
             Text("HeartBit is a minimal, robust personal task runner for macOS that lives quietly in your menu bar. Built with native Swift and modern SwiftUI, it allows you to schedule scripts, apps, and shell commands just like cron, but with an elegant native Mac interface.")
