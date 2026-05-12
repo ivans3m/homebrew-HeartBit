@@ -13,6 +13,7 @@ enum JobStatus: String, Codable, Equatable {
     case success
     case failed
     case delayed
+    case needsAuth
 }
 
 enum ScheduleInterval: String, Codable, CaseIterable, Identifiable {
@@ -120,7 +121,10 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     var startDate: Date = Date()
     var missedRunPolicy: MissedRunPolicy = .skip
     var isOnlineOnly: Bool = false
-    
+
+    var usesLoginShell: Bool = false
+    var timeoutMinutes: Int? = nil
+
     var lastRunDate: Date?
     var nextExpectedRunDate: Date?
     var onlineRetryAfterDate: Date?
@@ -131,7 +135,7 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
     var isRunning: Bool = false
     
     private enum CodingKeys: String, CodingKey {
-        case id, name, command, isEnabled, scheduleInterval, executionMode, customCronExpression, isImportedFromExternalCron, didConfirmHeartBitSwitch, startDate, missedRunPolicy, isOnlineOnly, lastRunDate, nextExpectedRunDate, onlineRetryAfterDate, lastRunStatus, latestOutput
+        case id, name, command, isEnabled, scheduleInterval, executionMode, customCronExpression, isImportedFromExternalCron, didConfirmHeartBitSwitch, startDate, missedRunPolicy, isOnlineOnly, usesLoginShell, timeoutMinutes, lastRunDate, nextExpectedRunDate, onlineRetryAfterDate, lastRunStatus, latestOutput
     }
 
     init(id: UUID = UUID(),
@@ -146,6 +150,8 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
          startDate: Date = Date(),
          missedRunPolicy: MissedRunPolicy = .skip,
          isOnlineOnly: Bool = false,
+         usesLoginShell: Bool = false,
+         timeoutMinutes: Int? = nil,
          lastRunDate: Date? = nil,
          nextExpectedRunDate: Date? = nil,
          onlineRetryAfterDate: Date? = nil,
@@ -164,6 +170,8 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         self.startDate = startDate
         self.missedRunPolicy = missedRunPolicy
         self.isOnlineOnly = isOnlineOnly
+        self.usesLoginShell = usesLoginShell
+        self.timeoutMinutes = timeoutMinutes
         self.lastRunDate = lastRunDate
         self.nextExpectedRunDate = nextExpectedRunDate
         self.onlineRetryAfterDate = onlineRetryAfterDate
@@ -186,6 +194,8 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         startDate = try container.decodeIfPresent(Date.self, forKey: .startDate) ?? Date()
         missedRunPolicy = try container.decodeIfPresent(MissedRunPolicy.self, forKey: .missedRunPolicy) ?? .skip
         isOnlineOnly = try container.decodeIfPresent(Bool.self, forKey: .isOnlineOnly) ?? false
+        usesLoginShell = try container.decodeIfPresent(Bool.self, forKey: .usesLoginShell) ?? false
+        timeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
         lastRunDate = try container.decodeIfPresent(Date.self, forKey: .lastRunDate)
         nextExpectedRunDate = try container.decodeIfPresent(Date.self, forKey: .nextExpectedRunDate)
         onlineRetryAfterDate = try container.decodeIfPresent(Date.self, forKey: .onlineRetryAfterDate)
@@ -208,6 +218,8 @@ struct HeartBitJob: Identifiable, Codable, Hashable {
         try container.encode(startDate, forKey: .startDate)
         try container.encode(missedRunPolicy, forKey: .missedRunPolicy)
         try container.encode(isOnlineOnly, forKey: .isOnlineOnly)
+        try container.encode(usesLoginShell, forKey: .usesLoginShell)
+        try container.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)
         try container.encode(lastRunDate, forKey: .lastRunDate)
         try container.encode(nextExpectedRunDate, forKey: .nextExpectedRunDate)
         try container.encode(onlineRetryAfterDate, forKey: .onlineRetryAfterDate)

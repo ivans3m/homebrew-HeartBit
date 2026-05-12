@@ -565,14 +565,21 @@ class JobManager {
         
         let jobName = jobs[idx].name
         let command = jobs[idx].command
-        
+        let usesLoginShell = jobs[idx].usesLoginShell
+        let timeoutMinutes = Self.resolvedTimeoutMinutes(jobs[idx].timeoutMinutes)
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
+        process.arguments = usesLoginShell ? ["-lc", command] : ["-c", command]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
-        
+        // Feed /dev/null so any interactive prompt (OAuth paste, `sudo`,
+        // `read`) gets EOF immediately instead of stalling until the watchdog.
+        if let devNull = FileHandle(forReadingAtPath: "/dev/null") {
+            process.standardInput = devNull
+        }
+
         actor TimeoutState {
             private var timedOut = false
             func markTimedOut() { timedOut = true }
@@ -585,8 +592,9 @@ class JobManager {
             try process.run()
             
             // Watchdog Timer
+            let timeoutNanos = UInt64(timeoutMinutes) * 60 * 1_000_000_000
             let watchDogTask = Task {
-                try await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000) // 10 minutes
+                try await Task.sleep(nanoseconds: timeoutNanos)
                 if process.isRunning {
                     process.terminate()
                     await timeoutState.markTimedOut()
@@ -600,19 +608,26 @@ class JobManager {
             watchDogTask.cancel() // Job completed
             
             let isTimedOut = await timeoutState.value()
-            let success = process.terminationStatus == 0 && !isTimedOut
-            let finalOutput = outputStr
-            
+            let exitCode = Int(process.terminationStatus)
+            let success = exitCode == 0 && !isTimedOut
+            let resolvedStatus: JobStatus = isTimedOut
+                ? .failed
+                : Self.resolveStatus(exitCode: exitCode, output: outputStr)
+            let finalOutput = isTimedOut
+                ? "TIMED OUT AFTER \(timeoutMinutes) MINUTE(S). ABORTED."
+                : outputStr
+
             await MainActor.run {
                 if let updatedIdx = self.jobs.firstIndex(where: { $0.id == id }) {
                     if !isDryRun {
                         self.jobs[updatedIdx].lastRunDate = Date()
-                        self.jobs[updatedIdx].lastRunStatus = success ? .success : .failed
+                        self.jobs[updatedIdx].lastRunStatus = resolvedStatus
                     }
-                    self.jobs[updatedIdx].latestOutput = isTimedOut ? "TIMED OUT AFTER 10 MINUTES. ABORTED." : finalOutput
+                    self.jobs[updatedIdx].latestOutput = finalOutput
                     self.jobs[updatedIdx].isRunning = false
                     self.saveJobs()
-                    self.appendLog("\(isDryRun ? "[DRY] " : "")\(success ? "SUCCESS" : "FAILED") - \(jobName)\(isTimedOut ? " (TIMEOUT)" : "")")
+                    let label = Self.logLabel(for: resolvedStatus, success: success)
+                    self.appendLog("\(isDryRun ? "[DRY] " : "")\(label) - \(jobName)\(isTimedOut ? " (TIMEOUT)" : "")")
                 }
             }
         } catch {
@@ -630,6 +645,94 @@ class JobManager {
                 }
             }
         }
+    }
+
+    /// Defaults to 10 minutes when the per-job timeout is absent or out of range.
+    static func resolvedTimeoutMinutes(_ value: Int?) -> Int {
+        guard let v = value, v > 0 else { return 10 }
+        return min(v, 240)
+    }
+
+    /// Exit code 2 = auth required, 3 = permission required. Both surface as `needsAuth`
+    /// so the UI can offer a Re-authenticate action. For third-party tools we don't control,
+    /// fall back to known output substrings (`invalid_grant`, "Not authorized to send Apple events", ...).
+    static func resolveStatus(exitCode: Int, output: String) -> JobStatus {
+        switch exitCode {
+        case 0:
+            return .success
+        case 2, 3:
+            return .needsAuth
+        default:
+            if Self.outputLooksLikeAuthFailure(output) { return .needsAuth }
+            return .failed
+        }
+    }
+
+    private static let _authOutputSignatures = [
+        "invalid_grant",
+        "Not authorized to send Apple events",
+        "errAEEventNotPermitted",
+        "Token has been expired",
+        "Token has expired",
+        "401 Unauthorized",
+        "Refresh token is missing",
+    ]
+
+    static func outputLooksLikeAuthFailure(_ output: String) -> Bool {
+        guard !output.isEmpty else { return false }
+        return _authOutputSignatures.contains(where: { output.contains($0) })
+    }
+
+    private static func logLabel(for status: JobStatus, success: Bool) -> String {
+        switch status {
+        case .needsAuth: return "NEEDS-AUTH"
+        case .success: return "SUCCESS"
+        case .failed: return "FAILED"
+        case .delayed: return "DELAYED"
+        case .running: return "RUNNING"
+        case .idle: return success ? "SUCCESS" : "FAILED"
+        }
+    }
+
+    // MARK: - Run job in Terminal
+
+    /// Writes a one-shot `.command` script and opens it in the user's default
+    /// terminal app so interactive auth flows (OAuth pastes, password prompts,
+    /// `sudo`) can complete. Bypasses HeartBit's background process so stdin/stdout
+    /// are real terminal handles.
+    func runJobInTerminal(id: UUID) {
+        guard let job = jobs.first(where: { $0.id == id }) else { return }
+
+        let fm = FileManager.default
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = support.appendingPathComponent("HeartBit/runs", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let scriptURL = dir.appendingPathComponent("\(job.id.uuidString).command")
+
+        let shebang = job.usesLoginShell ? "#!/bin/zsh -l" : "#!/bin/zsh"
+        // Heredoc-safe: avoid escaping the user's command; write it raw on its own line.
+        let body = """
+        \(shebang)
+        echo "HeartBit: running \(job.name) interactively"
+        echo
+        \(job.command)
+        status=$?
+        echo
+        echo "--- Exit code: $status ---"
+        echo "Press Return to close..."
+        read _
+        """
+
+        do {
+            try body.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        } catch {
+            appendLog("ERROR - Could not write Run-in-Terminal script for \(job.name): \(error.localizedDescription)")
+            return
+        }
+
+        NSWorkspace.shared.open(scriptURL)
+        appendLog("RUN-IN-TERMINAL - \(job.name)")
     }
 
     /// Coalesces rapid edits into fewer `crontab` writes (reduces repeated macOS permission prompts).

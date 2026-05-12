@@ -114,6 +114,7 @@ private func sidebarIcon(for job: HeartBitJob) -> String {
     if job.executionMode == .cron { return "circle.dotted" }
     if !job.isEnabled { return "pause.circle" }
     if job.isRunning { return "arrow.triangle.2.circlepath" }
+    if job.lastRunStatus == .needsAuth { return "key.fill" }
     if job.lastRunStatus == .delayed { return "clock.badge.exclamationmark" }
     if job.lastRunStatus == .success { return "circle.fill" }
     if job.lastRunStatus == .failed { return "circle.fill" }
@@ -123,6 +124,7 @@ private func sidebarIcon(for job: HeartBitJob) -> String {
 private func sidebarIconColor(for job: HeartBitJob) -> Color {
     if job.executionMode == .cron { return .secondary }
     if job.isRunning { return .yellow }
+    if job.lastRunStatus == .needsAuth { return .orange }
     if job.lastRunStatus == .delayed { return .orange }
     if job.lastRunStatus == .success { return .green }
     if job.lastRunStatus == .failed { return .red }
@@ -571,9 +573,36 @@ struct JobDetailView: View {
                                 TextField("Command / Path", text: Bindable(jobManager).jobs[idx].command)
                                 Button("Choose App...") { selectApp(idx: idx) }
                             }
+                            Toggle("Use login shell (-lc, loads ~/.zprofile for PATH)", isOn: Bindable(jobManager).jobs[idx].usesLoginShell)
+                            LabeledContent("Timeout (minutes)") {
+                                HStack(spacing: 8) {
+                                    TextField(
+                                        "default 10",
+                                        value: Binding(
+                                            get: { jobManager.jobs[idx].timeoutMinutes },
+                                            set: { jobManager.jobs[idx].timeoutMinutes = ($0 ?? 0) > 0 ? $0 : nil }
+                                        ),
+                                        format: .number
+                                    )
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 80)
+                                    .multilineTextAlignment(.trailing)
+                                    Text("(blank = default 10, max 240)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             Text("Security: this command runs through /bin/zsh with your macOS user permissions.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if jobManager.jobs[idx].lastRunStatus == .needsAuth {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "key.fill").foregroundStyle(.orange)
+                                    Text("This job needs re-authentication. Use 'Run in Terminal' to complete the interactive auth flow.")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
+                            }
                         }
                         .padding(.bottom, 16)
                         
@@ -706,7 +735,12 @@ struct JobDetailView: View {
                             Toggle("Enable Job", isOn: Bindable(jobManager).jobs[idx].isEnabled)
                                 .toggleStyle(.switch)
                             Spacer()
-                            
+
+                            Button("Run in Terminal") { jobManager.runJobInTerminal(id: jobId) }
+                                .disabled(jobManager.jobs[idx].command.isEmpty)
+                                .help("Run this command in Terminal.app so interactive auth prompts (OAuth, sudo) can complete.")
+                                .padding(.trailing)
+
                             Button("Run Job") { jobManager.enqueueJob(id: jobId, isDryRun: false) }
                                 .disabled(isRunning || jobManager.jobs[idx].command.isEmpty || jobManager.isExecutionPaused)
                                 .padding(.trailing)

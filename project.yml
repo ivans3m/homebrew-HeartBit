@@ -16,6 +16,7 @@ targets:
         CFBundleShortVersionString: "1.4.1"
         CFBundleVersion: "10"
         NSCameraUsageDescription: "HeartBit needs camera access to capture webcam photos for automation workflows."
+        NSAppleEventsUsageDescription: "HeartBit needs Automation access to drive other apps (for example Notes, Calendar, Finder) for scheduled jobs you configure."
     settings:
       base:
         PRODUCT_NAME: HeartBit
