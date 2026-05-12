@@ -83,11 +83,21 @@ xattr -dr com.apple.quarantine "/Applications/HeartBit.app"
    - In-app execution output
    - `~/Library/Logs/HeartBit/HeartBit.log`
 
+### Authentication & permissions
+Some jobs (cloud sync scripts, anything that drives another app via AppleScript, anything that needs `sudo`) need an interactive auth or permission step that HeartBit's background pipeline cannot satisfy on its own. HeartBit surfaces these as a dedicated **needs-auth** state and gives you the tools to clear them.
+
+- **Run in Terminal**: every job has a **Run in Terminal** button in its detail view. It writes a one-shot `.command` script and opens it in your default terminal app so any browser-based OAuth flow, `sudo` password prompt, or other interactive input can complete. Use this once after the first run fails with **needs-auth**; subsequent scheduled runs work headlessly.
+- **needs-auth status**: jobs exit with code `2` (auth required) or `3` (macOS permission required) are shown with a key icon in the sidebar instead of being lumped into generic failures. HeartBit also recognises common auth-failure substrings (`invalid_grant`, `Not authorized to send Apple events`, `Token has been expired`, ...) when third-party scripts return non-zero without setting an exit code, so you do not have to instrument every tool you call.
+- **Use login shell (-lc)**: per-job toggle on the job detail view. Switches HeartBit's invocation from `/bin/zsh -c` to `/bin/zsh -lc` so your `~/.zprofile` (and therefore your interactive-shell PATH) is loaded. Enable this for jobs that rely on Homebrew binaries, `pyenv`, `nvm`, or any other tooling installed outside the default `/usr/bin:/bin:/usr/sbin:/sbin`.
+- **Timeout (minutes)**: per-job watchdog replacing the previous hard-coded 10-minute limit. Leave blank for the default of 10, max 240. Combined with `stdin=/dev/null` (interactive prompts get EOF immediately), runaway auth waits now fail fast instead of stalling the queue.
+- **Automation prompts (Notes, Calendar, ...)**: HeartBit declares `NSAppleEventsUsageDescription`, so the first time a job drives another app via `osascript`, macOS shows a prompt that explains why. Approve once in **System Settings → Privacy & Security → Automation → HeartBit**; jobs return exit code `3` (needs-auth) if you deny it later.
+
 ### Troubleshooting
 - **“App is damaged” / blocked by Gatekeeper**: run the quarantine command above and reopen.
 - **No visible main window after launch**: check the macOS menu bar for the HeartBit icon.
 - **Task did not run**: confirm schedule, Mac sleep state, and check logs for stdout/stderr details.
 - **“HeartBit wants to administer your computer” (or similar) when saving Cron jobs**: macOS shows this when the app updates your user `crontab`. The system decides whether to prompt; HeartBit cannot store an “always allow” answer inside the app. After you approve once, you should see fewer prompts; HeartBit also avoids rewriting `crontab` when nothing changed and batches rapid edits. If prompts persist, check **System Settings → Privacy & Security** for anything still pending for HeartBit, and ensure you are not running multiple copies of the app.
+- **Job stuck in `needs-auth`**: open the job, click **Run in Terminal**, finish the interactive flow in the terminal window, then re-enable scheduled runs (or wait for the next slot). Sidebar key icon clears once the next run succeeds.
 
 ### Camera permission (webcam commands)
 - HeartBit defines camera privacy text in `project.yml` under `targets.HeartBit.info.properties.NSCameraUsageDescription` (XcodeGen source of truth for the app target plist).
