@@ -20,6 +20,8 @@
 	<string>10</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>HeartBit needs Automation access to drive other apps (for example Notes, Calendar, Finder) for scheduled jobs you configure.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>HeartBit needs camera access to capture webcam photos for automation workflows.</string>
 </dict>

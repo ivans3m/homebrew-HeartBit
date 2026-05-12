@@ -219,6 +219,11 @@ fi
 COMMIT_MSG="Release v${VERSION}"
 
 git add project.yml Casks/heartbit.rb
+# Info.plist is regenerated from project.yml by xcodegen during the release build.
+# Stage it only if it changed so existing release flows continue to work.
+if ! git diff --quiet -- Info.plist; then
+  git add Info.plist
+fi
 git commit -m "${COMMIT_MSG}"
 
 TAG="v${VERSION}"
